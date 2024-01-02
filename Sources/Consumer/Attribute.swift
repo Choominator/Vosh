@@ -1,5 +1,5 @@
 /// Non-comprehensive list of element attributes.
-enum AccessibilityAttribute: String {
+public enum Attribute: String {
     // Informational attributes.
     case role = "AXRole"
     case subrole = "AXSubrole"

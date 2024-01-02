@@ -1,16 +1,16 @@
 /// Wrapper around an event produced by the legacy consumer accessibility API.
-struct AccessibilityEvent {
+public struct Event {
     /// Type of event.
-    let notification: Notification
+    public let notification: Notification
     /// Application that triggered the event.
-    let application: AccessibilityElement
+    public let application: Element
     /// Element generating this event.
-    let subject: AccessibilityElement
+    public let subject: Element
     /// Event payload.
-    let payload: [String: Any]?
+    public let payload: [String: Any]?
 
     /// Event notifications.
-    enum Notification: String, CaseIterable {
+    public enum Notification: String, CaseIterable {
         // Keyboard focus events.
         case windowDidGetFocus = "AXFocusedWindowChanged"
         case elementDidGetFocus = "AXFocusedUIElementChanged"

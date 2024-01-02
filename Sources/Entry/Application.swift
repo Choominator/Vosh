@@ -1,45 +1,49 @@
 import AppKit
 
+import Input
+import Output
+import Consumer
+
 /// Handles the state of an application currently running on the system.
-actor AccessibilityApplication {
+actor Application {
     /// Name of the application.
     private let name: String
     /// Accessibility element of the application.
-    private let application: AccessibilityElement
+    private let application: Element
     /// Observer for accessibility events.
-    private let observer: AccessibilityObserver
+    private let observer: Observer
     /// Current window with focus.
-    private var focusedWindow: AccessibilityElement?
+    private var focusedWindow: Element?
     /// Saved state of focus elements and their ancestors.
-    private var windowFoci = [AccessibilityElement: [AccessibilityElement]]()
+    private var windowFoci = [Element: [Element]]()
     /// Input event handler.
-    private unowned var input: AccessibilityInput
+    private unowned var input: InputHandler
     /// Output conveyer.
-    private weak var output: AccessibilityOutput?
+    private weak var output: OutputConveyer?
 
     /// Creates a new instance to handle events from a running application.
     /// - Parameters:
     ///   - processIdentifier: PID of the application.
     ///   - input: Input event handler.
-    init(processIdentifier: pid_t, input: AccessibilityInput) async throws {
+    init(processIdentifier: pid_t, input: InputHandler) async throws {
         guard let runningApplication = NSRunningApplication(processIdentifier: processIdentifier) else {
-            throw AccessibilityError.invalidElement
+            throw ConsumerError.invalidElement
         }
         name = runningApplication.localizedName ?? "application"
         self.input = input
         do {
-            observer = try await AccessibilityObserver(processIdentifier: processIdentifier)
-            application = observer.element
+            observer = try await Observer(processIdentifier: processIdentifier)
+            application = await Element(processIdentifier: processIdentifier)
             try await refocus()
             await observer.subscribe(with: {[unowned self] in await handleEventStream($0)})
-        } catch AccessibilityError.apiDisabled {
-            throw AccessibilityError.apiDisabled
-        } catch AccessibilityError.invalidElement {
-            throw AccessibilityError.invalidElement
-        } catch AccessibilityError.notImplemented {
-            throw AccessibilityError.notImplemented
-        } catch AccessibilityError.timeout {
-            throw AccessibilityError.timeout
+        } catch ConsumerError.apiDisabled {
+            throw ConsumerError.apiDisabled
+        } catch ConsumerError.invalidElement {
+            throw ConsumerError.invalidElement
+        } catch ConsumerError.notImplemented {
+            throw ConsumerError.notImplemented
+        } catch ConsumerError.timeout {
+            throw ConsumerError.timeout
         } catch {
             fatalError("Unexpected error creating an application object: \(error.localizedDescription)")
         }
@@ -71,7 +75,7 @@ actor AccessibilityApplication {
             let queue = await output.makeQueue()
             do {
                 try await refocus()
-                let focusStack = if let focusedWindow = focusedWindow {windowFoci[focusedWindow] ?? [AccessibilityElement]()} else {[AccessibilityElement]()}
+                let focusStack = if let focusedWindow = focusedWindow {windowFoci[focusedWindow] ?? [Element]()} else {[Element]()}
                 guard let focusedWindow = focusedWindow, let focus = focusStack.last else {
                     await output.conveyNoFocus()
                     return
@@ -80,15 +84,15 @@ actor AccessibilityApplication {
                 if await queue.setFocus(to: focus) {
                     return
                 }
-            } catch AccessibilityError.invalidElement {
+            } catch ConsumerError.invalidElement {
                 continue
-            } catch AccessibilityError.notImplemented {
+            } catch ConsumerError.notImplemented {
                 await output.conveyNotAccessible(application: name)
                 return
-            } catch AccessibilityError.apiDisabled {
+            } catch ConsumerError.apiDisabled {
                 await output.conveyAPIDisabled()
                 return
-            } catch AccessibilityError.timeout {
+            } catch ConsumerError.timeout {
                 await output.conveyNoResponse(application: name)
                 return
             } catch {
@@ -107,10 +111,10 @@ actor AccessibilityApplication {
             let queue = await output.makeQueue()
             do {
                 // Retrieve the current focused element, refocusing if necessary.
-                var focusStack = if let focusedWindow = focusedWindow {windowFoci[focusedWindow] ?? [AccessibilityElement]()} else {[AccessibilityElement]()}
+                var focusStack = if let focusedWindow = focusedWindow {windowFoci[focusedWindow] ?? [Element]()} else {[Element]()}
                 let oldFocus = focusStack.last
                 try await refocus()
-                focusStack = if let focusedWindow = focusedWindow {windowFoci[focusedWindow] ?? [AccessibilityElement]()} else {[AccessibilityElement]()}
+                focusStack = if let focusedWindow = focusedWindow {windowFoci[focusedWindow] ?? [Element]()} else {[Element]()}
                 let focus = focusStack.last
                 guard let focusedWindow = focusedWindow, focus == oldFocus, let focus = focus else {
                     guard let focus = focus else {
@@ -136,15 +140,15 @@ actor AccessibilityApplication {
                 if await queue.setFocus(to: focus) {
                     return
                 }
-            } catch AccessibilityError.invalidElement {
+            } catch ConsumerError.invalidElement {
                 continue
-            } catch AccessibilityError.notImplemented {
+            } catch ConsumerError.notImplemented {
                 await output.conveyNotAccessible(application: name)
                 return
-            } catch AccessibilityError.apiDisabled {
+            } catch ConsumerError.apiDisabled {
                 await output.conveyAPIDisabled()
                 return
-            } catch AccessibilityError.timeout {
+            } catch ConsumerError.timeout {
                 await output.conveyNoResponse(application: name)
                 return
             } catch {
@@ -162,10 +166,10 @@ actor AccessibilityApplication {
             let queue = await output.makeQueue()
             do {
                 // Retrieve the current focused element, refocusing if necessary.
-                var focusStack = if let focusedWindow = focusedWindow {windowFoci[focusedWindow] ?? [AccessibilityElement]()} else {[AccessibilityElement]()}
+                var focusStack = if let focusedWindow = focusedWindow {windowFoci[focusedWindow] ?? [Element]()} else {[Element]()}
                 let oldFocus = focusStack.last
                 try await refocus()
-                focusStack = if let focusedWindow = focusedWindow {windowFoci[focusedWindow] ?? [AccessibilityElement]()} else {[AccessibilityElement]()}
+                focusStack = if let focusedWindow = focusedWindow {windowFoci[focusedWindow] ?? [Element]()} else {[Element]()}
                 let focus = focusStack.last
                 guard let focusedWindow = focusedWindow, focus == oldFocus, let focus = focus else {
                     guard let focus = focus else {
@@ -187,15 +191,15 @@ actor AccessibilityApplication {
                 if await queue.focusChild(child) {
                     return
                 }
-            } catch AccessibilityError.invalidElement {
+            } catch ConsumerError.invalidElement {
                 continue
-            } catch AccessibilityError.notImplemented {
+            } catch ConsumerError.notImplemented {
                 await output.conveyNotAccessible(application: name)
                 return
-            } catch AccessibilityError.apiDisabled {
+            } catch ConsumerError.apiDisabled {
                 await output.conveyAPIDisabled()
                 return
-            } catch AccessibilityError.timeout {
+            } catch ConsumerError.timeout {
                 await output.conveyNoResponse(application: name)
                 return
             } catch {
@@ -213,10 +217,10 @@ actor AccessibilityApplication {
             let queue = await output.makeQueue()
             do {
                 // Retrieve the current focused element, refocusing if necessary.
-                var focusStack = if let focusedWindow = focusedWindow {windowFoci[focusedWindow] ?? [AccessibilityElement]()} else {[AccessibilityElement]()}
+                var focusStack = if let focusedWindow = focusedWindow {windowFoci[focusedWindow] ?? [Element]()} else {[Element]()}
                 let oldFocus = focusStack.last
                 try await refocus()
-                focusStack = if let focusedWindow = focusedWindow {windowFoci[focusedWindow] ?? [AccessibilityElement]()} else {[AccessibilityElement]()}
+                focusStack = if let focusedWindow = focusedWindow {windowFoci[focusedWindow] ?? [Element]()} else {[Element]()}
                 let focus = focusStack.last
                 guard let focusedWindow = focusedWindow, focus == oldFocus, focus != nil else {
                     guard let focus = focus else {
@@ -238,15 +242,15 @@ actor AccessibilityApplication {
                 if await queue.focusParent(parent) {
                     return
                 }
-            } catch AccessibilityError.invalidElement {
+            } catch ConsumerError.invalidElement {
                 continue
-            } catch AccessibilityError.notImplemented {
+            } catch ConsumerError.notImplemented {
                 await output.conveyNotAccessible(application: name)
                 return
-            } catch AccessibilityError.apiDisabled {
+            } catch ConsumerError.apiDisabled {
                 await output.conveyAPIDisabled()
                 return
-            } catch AccessibilityError.timeout {
+            } catch ConsumerError.timeout {
                 await output.conveyNoResponse(application: name)
                 return
             } catch {
@@ -256,7 +260,7 @@ actor AccessibilityApplication {
     }
 
     /// Sets this application as active.
-    func setActive(output: AccessibilityOutput) async {
+    func setActive(output: OutputConveyer) async {
         self.output = output
         await output.cacheActiveApplication(name)
         await readFocus()
@@ -269,7 +273,7 @@ actor AccessibilityApplication {
 
     /// Handles the stream of accessibility events.
     /// - Parameter eventStream: Stream of accessibility events.
-    private func handleEventStream(_ eventStream: AsyncStream<AccessibilityEvent>) async {
+    private func handleEventStream(_ eventStream: AsyncStream<Event>) async {
         for await event in eventStream {
             guard let output = output else {
                 continue
@@ -287,7 +291,7 @@ actor AccessibilityApplication {
                 guard let focusedWindow = focusedWindow, let focus = windowFoci[focusedWindow]?.last, focus == event.subject else {
                     continue
                 }
-                _ = await queue.setSelection(input: input)
+                _ = await queue.setSelection()
             case .titleDidUpdate:
                 guard let focusedWindow = focusedWindow, let focus = windowFoci[focusedWindow]?.last, focus == event.subject else {
                     continue
@@ -311,25 +315,25 @@ actor AccessibilityApplication {
     private func setFocus() async {
         while true {
             do {
-                guard let focus = try await application.readAttribute(.focusedElement) as? AccessibilityElement else {
+                guard let focus = try await application.readAttribute(.focusedElement) as? Element else {
                     await output?.conveyNoFocus()
                     return
                 }
-                guard let focusedWindow = try await focus.readAttribute(.focusedWindow) as? AccessibilityElement else {
+                guard let focusedWindow = try await focus.readAttribute(.focusedWindow) as? Element else {
                     await output?.conveyNoFocus()
                     return
                 }
                 windowFoci[focusedWindow] = try await Self.findAncestors(of: focus)
                 self.focusedWindow = focusedWindow
-            } catch AccessibilityError.invalidElement {
+            } catch ConsumerError.invalidElement {
                 continue
-            } catch AccessibilityError.notImplemented {
+            } catch ConsumerError.notImplemented {
                 await output?.conveyNotAccessible(application: name)
                 return
-            } catch AccessibilityError.apiDisabled {
+            } catch ConsumerError.apiDisabled {
                 await output?.conveyAPIDisabled()
                 return
-            } catch AccessibilityError.timeout {
+            } catch ConsumerError.timeout {
                 await output?.conveyNoResponse(application: name)
                 return
             } catch {
@@ -341,7 +345,7 @@ actor AccessibilityApplication {
     /// Resets the accessibility focus when for some reason the screen-reader becomes lost.
     private func refocus() async throws {
         guard let focusedWindow = focusedWindow else {
-            guard let focus = try await application.readAttribute(.focusedElement) as? AccessibilityElement, let focusedWindow = try await focus.readAttribute(.windowElement) as? AccessibilityElement else {
+            guard let focus = try await application.readAttribute(.focusedElement) as? Element, let focusedWindow = try await focus.readAttribute(.windowElement) as? Element else {
                 self.focusedWindow = nil
                 windowFoci.removeAll(keepingCapacity: true)
                 return
@@ -370,7 +374,7 @@ actor AccessibilityApplication {
     ///   - previous: Previous sibling.
     ///   - backward: Whether to search backwards.
     /// - Returns: The element that was found, if any.
-    private static func findFirstChild(of element: AccessibilityElement, after previous: AccessibilityElement? = nil, backward: Bool) async throws -> AccessibilityElement? {
+    private static func findFirstChild(of element: Element, after previous: Element? = nil, backward: Bool) async throws -> Element? {
         let children = if let children = try await element.readAttribute(.navigationOrderedChildrenElements) as? [Any?] {
             children
         } else if let children = try await element.readAttribute(.childrenElements) as? [Any?] {
@@ -381,7 +385,7 @@ actor AccessibilityApplication {
         var found = previous == nil
         if !backward {
             for child in children {
-                guard let child = child as? AccessibilityElement else {
+                guard let child = child as? Element else {
                     continue
                 }
                 let interesting = try await Self.isInterestingElement(child)
@@ -399,7 +403,7 @@ actor AccessibilityApplication {
             return nil
         }
         for child in children.lazy.reversed() {
-            guard let child = child as? AccessibilityElement else {
+            guard let child = child as? Element else {
                 continue
             }
             let interesting = try await Self.isInterestingElement(child)
@@ -420,13 +424,13 @@ actor AccessibilityApplication {
     /// Builds a list of interesting ancestors of the specified element.
     /// - Parameter element: Element whose interesting ancestors are to be searched.
     /// - Returns: The list of ancestors.
-    private static func findAncestors(of element: AccessibilityElement) async throws -> [AccessibilityElement] {
-        guard let window = try await element.readAttribute(.windowElement) as? AccessibilityElement else {
+    private static func findAncestors(of element: Element) async throws -> [Element] {
+        guard let window = try await element.readAttribute(.windowElement) as? Element else {
             fatalError("Element has no window ancestor")
         }
-        var ancestors = [AccessibilityElement]()
+        var ancestors = [Element]()
         var element = element
-        while let parent = try await element.readAttribute(.parentElement) as? AccessibilityElement, parent != window {
+        while let parent = try await element.readAttribute(.parentElement) as? Element, parent != window {
             if try await Self.isInterestingElement(parent) {
                 ancestors.append(element)
             }
@@ -438,7 +442,7 @@ actor AccessibilityApplication {
     /// Applies some criteria to heuristically determine whether an element has any accessibility relevance.
     /// - Parameter element: Element to be checked.
     /// - Returns: whether the element is interesting.
-    private static func isInterestingElement(_ element: AccessibilityElement) async throws -> Bool {
+    private static func isInterestingElement(_ element: Element) async throws -> Bool {
         let attributes = try await element.listAttributes()
         if attributes.contains(.hasWebApplicationAncestor), let children = try await element.readAttribute(.childrenElements) as? [Any?], !children.isEmpty {
             return false
@@ -449,7 +453,7 @@ actor AccessibilityApplication {
         if attributes.contains(.title), let title = try await element.readAttribute(.title) as? String, !title.isEmpty {
             return true
         }
-        if attributes.contains(.titleElement), let element = try await element.readAttribute(.titleElement) as? AccessibilityElement, let title = try await element.readAttribute(.title) as? String, !title.isEmpty {
+        if attributes.contains(.titleElement), let element = try await element.readAttribute(.titleElement) as? Element, let title = try await element.readAttribute(.title) as? String, !title.isEmpty {
             return true
         }
         if attributes.contains(.value) {
@@ -460,7 +464,7 @@ actor AccessibilityApplication {
 
     /// Dumps the entire hierarchy of elements rooted at the specified element to a property list file chosen by the user.
     /// - Parameter element: Root element.
-    @MainActor private func dumpElement(_ element: AccessibilityElement) async {
+    @MainActor private func dumpElement(_ element: Element) async {
         guard let output = await output else {
             return
         }
@@ -486,17 +490,17 @@ actor AccessibilityApplication {
             alert.messageText = "There was an error generating the property list: \(error.localizedDescription)"
             alert.runModal()
             return
-        } catch AccessibilityError.notImplemented {
+        } catch ConsumerError.notImplemented {
             let alert = NSAlert()
             alert.messageText = "\(name) is not accessible"
             alert.runModal()
             return
-        } catch AccessibilityError.apiDisabled {
+        } catch ConsumerError.apiDisabled {
             let alert = NSAlert()
             alert.messageText = "Accessibility API disabled."
             alert.runModal()
             return
-        } catch AccessibilityError.timeout {
+        } catch ConsumerError.timeout {
             let alert = NSAlert()
             alert.messageText = "\(name) is not responding."
             alert.runModal()
@@ -506,3 +510,4 @@ actor AccessibilityApplication {
         }
     }
 }
+

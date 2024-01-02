@@ -3,34 +3,38 @@ import Combine
 import Foundation
 import OSLog
 
+import Input
+import Output
+import Consumer
+
 /// Main screen-reader instance.
-/// 
-/// Only a single instance of this object should be instantiated per screen-reader instance.
-@MainActor public final class AccessibilityAgent {
+@MainActor final class Agent {
     /// Input listening and tapping instance.
-    private let input: AccessibilityInput
+    private var input: InputHandler!
     /// Output conveying instance.
-    private let output: AccessibilityOutput
+    private var output: OutputConveyer!
     /// Notification center publisher.
     private var notificationStreamHandle: Cancellable!
     /// Notification handling task.
     private var notificationTask: Task<Void, Never>!
     /// Application resolver by process identifier.
-    private var applicationRegistry = [pid_t: AccessibilityApplication]()
+    private var applicationRegistry = [pid_t: Application]()
     /// Process identifier of the currently active application.
     private var activeProcessIdentifier: pid_t = 0
 
     /// Shortcut to the active application.
-    private var activeApplication: AccessibilityApplication? {applicationRegistry[activeProcessIdentifier]}
+    private var activeApplication: Application? {applicationRegistry[activeProcessIdentifier]}
 
     /// Creates a new agent.
-    public init?() async {
+    init?() async {
         // Exit before initializing anything unless we have accessibility permissions.
-        guard AccessibilityElement.confirmProcessTrustedStatus() else {
+        guard Element.confirmProcessTrustedStatus() else {
             return nil
         }
-        input = AccessibilityInput()
-        output = AccessibilityOutput()
+        input = InputHandler()
+        input.delegate = self
+        output = OutputConveyer()
+        output.delegate = self
         setupNotificationListener()
         guard await targetActiveApplication() else {
             return nil
@@ -69,20 +73,20 @@ import OSLog
         while runningApplication.isActive {
             do {
                 let processIdentifier = runningApplication.processIdentifier
-                let application = try await AccessibilityApplication(processIdentifier: processIdentifier, input: input)
+                let application = try await Application(processIdentifier: processIdentifier, input: input)
                 applicationRegistry[processIdentifier] = application
                 activeProcessIdentifier = runningApplication.processIdentifier
                 await application.setActive(output: output)
                 break
-            } catch AccessibilityError.apiDisabled {
+            } catch ConsumerError.apiDisabled {
                 output.conveyAPIDisabled()
                 return false
-            } catch AccessibilityError.invalidElement {
+            } catch ConsumerError.invalidElement {
                 break
-            } catch AccessibilityError.notImplemented {
+            } catch ConsumerError.notImplemented {
                 output.conveyNotAccessible(application: name)
                 break
-            } catch AccessibilityError.timeout {
+            } catch ConsumerError.timeout {
                 output.conveyNoResponse(application: name)
                 continue
             } catch {
@@ -147,20 +151,20 @@ import OSLog
             while runningApplication.isActive {
                 do {
                     let processIdentifier = runningApplication.processIdentifier
-                    let application = try await AccessibilityApplication(processIdentifier: processIdentifier, input: input)
+                    let application = try await Application(processIdentifier: processIdentifier, input: input)
                     applicationRegistry[processIdentifier] = application
                     await application.setActive(output: output)
                     activeProcessIdentifier = processIdentifier
                     return
-                } catch AccessibilityError.apiDisabled {
+                } catch ConsumerError.apiDisabled {
                     output.conveyAPIDisabled()
                     return
-                } catch AccessibilityError.invalidElement {
+                } catch ConsumerError.invalidElement {
                     return
-                } catch AccessibilityError.notImplemented {
+                } catch ConsumerError.notImplemented {
                     output.conveyNotAccessible(application: runningApplication.localizedName ?? "Unnamed application")
                     return
-                } catch AccessibilityError.timeout {
+                } catch ConsumerError.timeout {
                     output.conveyNoResponse(application: runningApplication.localizedName ?? "UnnamedApplication")
                     continue
                 } catch {
@@ -190,5 +194,25 @@ import OSLog
     deinit {
         notificationStreamHandle.cancel()
         notificationTask.cancel()
+    }
+}
+
+extension Agent: OutputConveyerDelegate {
+    func checkHorizontalArrowKeyState() -> Bool {
+        return input.checkKeyState(.keyboardLeftArrow) || input.checkKeyState(.keyboardRightArrow)
+    }
+
+    func checkVerticalArrowKeyState() -> Bool {
+        return input.checkKeyState(.keyboardDownArrow) || input.checkKeyState(.keyboardUpArrow)
+    }
+
+    func checkOptionModifierKeyState() -> Bool {
+        return input.checkOptionModifierState()
+    }
+}
+
+extension Agent: InputHandlerDelegate {
+    func capsLockDidChangeState(to state: Bool) {
+        output.announce("CapsLock \(state ? "on" : "off")")
     }
 }

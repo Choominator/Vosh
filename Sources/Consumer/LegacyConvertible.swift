@@ -2,7 +2,7 @@ import Foundation
 import ApplicationServices
 
 /// Declares the required functionality for any Swift type that can be converted to and from a CoreFoundation type.
-protocol AccessibilityLegacyConvertible {
+protocol LegacyConvertible {
     /// CoreFoundation type.
     associatedtype LegacyType
     /// Initializes a new Swift type by converting from a legacy CoreFoundation type.
@@ -11,7 +11,7 @@ protocol AccessibilityLegacyConvertible {
     var legacyValue: LegacyType {get}
 }
 
-extension Optional: AccessibilityLegacyConvertible where Wrapped: AccessibilityLegacyConvertible {
+extension Optional where Wrapped: LegacyConvertible {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) != CFNullGetTypeID() else {
             return nil
@@ -29,7 +29,7 @@ extension Optional: AccessibilityLegacyConvertible where Wrapped: AccessibilityL
     }
 }
 
-extension Bool: AccessibilityLegacyConvertible {
+extension Bool: LegacyConvertible {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == CFBooleanGetTypeID() else {
             return nil
@@ -43,7 +43,7 @@ extension Bool: AccessibilityLegacyConvertible {
     }
 }
 
-extension Int64: AccessibilityLegacyConvertible {
+extension Int64: LegacyConvertible {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == CFNumberGetTypeID() else {
             return nil
@@ -65,7 +65,7 @@ extension Int64: AccessibilityLegacyConvertible {
     }
 }
 
-extension Double: AccessibilityLegacyConvertible {
+extension Double: LegacyConvertible {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == CFNumberGetTypeID() else {
             return nil
@@ -87,7 +87,7 @@ extension Double: AccessibilityLegacyConvertible {
     }
 }
 
-extension String: AccessibilityLegacyConvertible {
+extension String: LegacyConvertible {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == CFStringGetTypeID() else {
             return nil
@@ -100,7 +100,7 @@ extension String: AccessibilityLegacyConvertible {
     }
 }
 
-extension [Any?]: AccessibilityLegacyConvertible {
+extension [Any?]: LegacyConvertible {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == CFArrayGetTypeID() else {
             return nil
@@ -118,7 +118,7 @@ extension [Any?]: AccessibilityLegacyConvertible {
     }
 }
 
-extension [String: Any]: AccessibilityLegacyConvertible {
+extension [String: Any]: LegacyConvertible {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == CFDictionaryGetTypeID() else {
             return nil
@@ -139,7 +139,7 @@ extension [String: Any]: AccessibilityLegacyConvertible {
     }
 }
 
-extension URL: AccessibilityLegacyConvertible {
+extension URL: LegacyConvertible {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == CFURLGetTypeID() else {
             return nil
@@ -153,7 +153,7 @@ extension URL: AccessibilityLegacyConvertible {
     }
 }
 
-extension AttributedString: AccessibilityLegacyConvertible {
+extension AttributedString: LegacyConvertible {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == CFAttributedStringGetTypeID() else {
             return nil
@@ -167,7 +167,7 @@ extension AttributedString: AccessibilityLegacyConvertible {
     }
 }
 
-extension Range: AccessibilityLegacyConvertible where Bound == Int {
+extension Range: LegacyConvertible where Bound == Int {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == AXValueGetTypeID() else {
             return nil
@@ -186,7 +186,7 @@ extension Range: AccessibilityLegacyConvertible where Bound == Int {
     }
 }
 
-extension CGPoint: AccessibilityLegacyConvertible {
+extension CGPoint: LegacyConvertible {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == AXValueGetTypeID() else {
             return nil
@@ -205,7 +205,7 @@ extension CGPoint: AccessibilityLegacyConvertible {
     }
 }
 
-extension CGSize: AccessibilityLegacyConvertible {
+extension CGSize: LegacyConvertible {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == AXValueGetTypeID() else {
             return nil
@@ -224,7 +224,7 @@ extension CGSize: AccessibilityLegacyConvertible {
     }
 }
 
-extension CGRect: AccessibilityLegacyConvertible {
+extension CGRect: LegacyConvertible {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == AXValueGetTypeID() else {
             return nil
@@ -243,7 +243,7 @@ extension CGRect: AccessibilityLegacyConvertible {
     }
 }
 
-extension AccessibilityError: AccessibilityLegacyConvertible {
+extension ConsumerError: LegacyConvertible {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == AXValueGetTypeID() else {
             return nil
@@ -253,7 +253,7 @@ extension AccessibilityError: AccessibilityLegacyConvertible {
         guard AXValueGetValue(value, .axError, &error) else {
             return nil
         }
-        self = AccessibilityError(from: error)
+        self = ConsumerError(from: error)
     }
 
     var legacyValue: AXValue {
@@ -262,7 +262,7 @@ extension AccessibilityError: AccessibilityLegacyConvertible {
     }
 }
 
-extension AccessibilityElement: AccessibilityLegacyConvertible {}
+extension Element: LegacyConvertible {}
 
 /// Converts a value from any known legacy type to a Swift type.
 /// - Parameter value: Value to convert.
@@ -310,10 +310,10 @@ func fromLegacy(value: CFTypeRef?) -> Any? {
     if let rect = CGRect(legacyValue: value) {
         return rect
     }
-    if let error = AccessibilityError(legacyValue: value) {
+    if let error = ConsumerError(legacyValue: value) {
         return error
     }
-    if let element = AccessibilityElement(legacyValue: value) {
+    if let element = Element(legacyValue: value) {
         return element
     }
     return nil

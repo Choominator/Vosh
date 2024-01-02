@@ -2,7 +2,7 @@ import ApplicationServices
 import OSLog
 
 /// Swift wrapper for a legacy ``AXUIElement``.
-@AccessibilityActor struct AccessibilityElement: Hashable {
+@ConsumerActor public struct Element: Hashable {
     /// Legacy value.
     let legacyValue: AXUIElement
     /// Global timeout to be set on all elements.
@@ -11,34 +11,34 @@ import OSLog
     private static let logger = Logger()
 
     /// Creates a system-wide element.
-    init() {
+    public init() {
         legacyValue = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(legacyValue, Self.timeout)
     }
 
     /// Creates an application element for the specified PID.
     /// - Parameter processIdentifier: PID of the application.
-    init(processIdentifier: pid_t) {
+    public init(processIdentifier: pid_t) {
         legacyValue = AXUIElementCreateApplication(processIdentifier)
         AXUIElementSetMessagingTimeout(legacyValue, Self.timeout)
     }
 
     /// Wraps a legacy ``AXUIElement`` possibly obtained from an accessibility event.
     /// - Parameter value: Legacy value to wrap.
-    nonisolated init?(legacyValue value: CFTypeRef) {
+    public nonisolated init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == AXUIElementGetTypeID() else {
             return nil
         }
         legacyValue = unsafeBitCast(value, to: AXUIElement.self)
-        Task(operation: {[legacyValue] in await AccessibilityActor.run(body: {[legacyValue] in AXUIElementSetMessagingTimeout(legacyValue, Self.timeout)})})
+        Task(operation: {[legacyValue] in await ConsumerActor.run(body: {[legacyValue] in AXUIElementSetMessagingTimeout(legacyValue, Self.timeout)})})
     }
 
     /// Creates the element corresponding to the application of the specified element.
     /// - Returns: Application element.
-    func getApplication() throws -> AccessibilityElement {
+    public func getApplication() throws -> Element {
         var processIdentifier = pid_t(0)
         let result = AXUIElementGetPid(legacyValue, &processIdentifier)
-        let error = AccessibilityError(from: result)
+        let error = ConsumerError(from: result)
         switch error {
         case .success:
             break
@@ -47,16 +47,16 @@ import OSLog
         default:
             fatalError("Unexpected error getting an accessibility element's associated process identifier: \(error.localizedDescription)")
         }
-        return AccessibilityElement(processIdentifier: processIdentifier)
+        return Element(processIdentifier: processIdentifier)
     }
 
     /// Dumps this element and all of its children to a data structure suitable to be encoded and serialized.
     /// - Returns: Serializable element structure.
-    func dump() async throws -> [String: Any]? {
+    public func dump() async throws -> [String: Any]? {
         do {
             var attributes: CFArray?
             let result = AXUIElementCopyAttributeNames(legacyValue, &attributes)
-            let error = AccessibilityError(from: result)
+            let error = ConsumerError(from: result)
             switch error {
             case .success:
                 break
@@ -66,17 +66,17 @@ import OSLog
                 fatalError("Unexpected error reading an accessibility element's attribute names: \(error.localizedDescription)")
             }
             guard let attributes = [Any?](legacyValue: attributes as CFTypeRef) else {
-                throw AccessibilityError.systemFailure
+                throw ConsumerError.systemFailure
             }
             var attributeValues = [String: Any]()
             for attribute in attributes {
                 guard let attribute = attribute as? String, let value = readAttribute(attribute) else {
                     continue
                 }
-                attributeValues[attribute] = try await encode(value: value, readElements: attribute == AccessibilityAttribute.childrenElements.rawValue)
+                attributeValues[attribute] = try await encode(value: value, readElements: attribute == Attribute.childrenElements.rawValue)
             }
             return attributeValues
-        } catch AccessibilityError.invalidElement {
+        } catch ConsumerError.invalidElement {
             return nil
         } catch {
             throw error
@@ -85,10 +85,10 @@ import OSLog
 
     /// Creates a list of all the known attributes of this element.
     /// - Returns: List of attributes.
-    func listAttributes() throws -> Set<AccessibilityAttribute> {
+    public func listAttributes() throws -> Set<Attribute> {
         var attributes: CFArray?
         let result = AXUIElementCopyAttributeNames(legacyValue, &attributes)
-        let error = AccessibilityError(from: result)
+        let error = ConsumerError(from: result)
         switch error {
         case .success:
             break
@@ -100,12 +100,12 @@ import OSLog
         guard let attributes = [Any?](legacyValue: attributes as CFTypeRef) else {
             return []
         }
-        var attributeSet = Set<AccessibilityAttribute>()
+        var attributeSet = Set<Attribute>()
         for attribute in attributes {
             guard let attribute = attribute as? String else {
                 continue
             }
-            guard let attribute = AccessibilityAttribute(rawValue: attribute) else {
+            guard let attribute = Attribute(rawValue: attribute) else {
                 continue
             }
             attributeSet.insert(attribute)
@@ -116,10 +116,10 @@ import OSLog
     /// Reads the value associated with a given attribute of this element.
     /// - Parameter attribute: Attribute whose value is to be read.
     /// - Returns: Value of the attribute, if any.
-    func readAttribute(_ attribute: AccessibilityAttribute) throws -> Any? {
+    public func readAttribute(_ attribute: Attribute) throws -> Any? {
         var value: CFTypeRef?
         let result = AXUIElementCopyAttributeValue(legacyValue, attribute.rawValue as CFString, &value)
-        let error = AccessibilityError(from: result)
+        let error = ConsumerError(from: result)
         switch error {
         case .success:
             break
@@ -140,10 +140,12 @@ import OSLog
     /// - Parameters:
     ///   - attribute: Attribute to be written.
     ///   - value: Value to write.
-    func riteAttribute<T: AccessibilityLegacyConvertible>(_ attribute: AccessibilityAttribute, value: T?) throws {
-        let value = value.legacyValue
-        let result = AXUIElementSetAttributeValue(legacyValue, attribute.rawValue as CFString, value)
-        let error = AccessibilityError(from: result)
+    public func riteAttribute(_ attribute: Attribute, value: Any) throws {
+        guard let value = value as? any LegacyConvertible else {
+            throw ConsumerError.illegalArgument
+        }
+        let result = AXUIElementSetAttributeValue(legacyValue, attribute.rawValue as CFString, value.legacyValue as CFTypeRef)
+        let error = ConsumerError(from: result)
         switch error {
         case .success:
             break
@@ -159,11 +161,13 @@ import OSLog
     ///   - query: Parameterized attribute to query.
     ///   - input: Input value.
     /// - Returns: Output value.
-    func query<T: AccessibilityLegacyConvertible>(_ query: AccessibilityQuery, input: T) throws -> Any? {
-        let input = input.legacyValue as CFTypeRef
+    public func query(_ query: Query, input: Any) throws -> Any? {
+        guard let input = input as? any LegacyConvertible else {
+            throw ConsumerError.illegalArgument
+        }
         var output: CFTypeRef?
-        let result = AXUIElementCopyParameterizedAttributeValue(legacyValue, query.rawValue as CFString, input, &output)
-        let error = AccessibilityError(from: result)
+        let result = AXUIElementCopyParameterizedAttributeValue(legacyValue, query.rawValue as CFString, input.legacyValue as CFTypeRef, &output)
+        let error = ConsumerError(from: result)
         switch error {
         case .success:
             break
@@ -179,10 +183,10 @@ import OSLog
 
     /// Creates a list of all the actions supported by this element along with their respective descriptions.
     /// - Returns: List of actions.
-    func listActions() async throws -> [(action: String, description: String)] {
+    public func listActions() async throws -> [(action: String, description: String)] {
         var actions: CFArray?
         let result = AXUIElementCopyActionNames(legacyValue, &actions)
-        let error = AccessibilityError(from: result)
+        let error = ConsumerError(from: result)
         switch error {
         case .success:
             break
@@ -203,7 +207,7 @@ import OSLog
             await Task.yield()
             var description: CFString?
             let result = AXUIElementCopyActionDescription(legacyValue, action as CFString, &description)
-            let error = AccessibilityError(from: result)
+            let error = ConsumerError(from: result)
             switch error {
             case .success:
                 break
@@ -225,9 +229,9 @@ import OSLog
 
     /// Performs the specified action on this element.
     /// - Parameter action: Action to perform.
-    func performAction(_ action: String) throws {
+    public func performAction(_ action: String) throws {
         let result = AXUIElementPerformAction(legacyValue, action as CFString)
-        let error = AccessibilityError(from: result)
+        let error = ConsumerError(from: result)
         switch error {
         case .success:
             break
@@ -240,7 +244,7 @@ import OSLog
 
     /// Checks whether this process is trusted and prompts the user to grant it accessibility privileges if it isn't.
     /// - Returns: Whether this process has accessibility privileges.
-    @MainActor static func confirmProcessTrustedStatus() -> Bool {
+    @MainActor public static func confirmProcessTrustedStatus() -> Bool {
         return AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)
     }
 
@@ -248,12 +252,9 @@ import OSLog
     /// - Parameter attribute: Attribute to read.
     /// - Returns: Associated value.
     private func readAttribute(_ attribute: String) -> Any? {
-        if attribute == "AXMakeScreenRectVisible" {
-            return nil
-        }
         var value: CFTypeRef?
         let result = AXUIElementCopyAttributeValue(legacyValue, attribute as CFString, &value)
-        let error = AccessibilityError(from: result)
+        let error = ConsumerError(from: result)
         switch error {
         case .success:
             break
@@ -273,7 +274,7 @@ import OSLog
     ///   - value: Value to encode.
     ///   - readElements: Whether to recursively read the children of element values.
     /// - Returns: Data structure of elements suitable to be serialized.
-    func encode(value: Any, readElements: Bool) async throws -> Any? {
+    private func encode(value: Any, readElements: Bool) async throws -> Any? {
         switch value {
         case is Bool, is Int64, is Double, is String:
             return value
@@ -307,13 +308,13 @@ import OSLog
             return ["width": size.width, "height": size.height]
         case let rect as CGRect:
             return ["x": rect.origin.x, "y": rect.origin.y, "width": rect.size.width, "height": rect.size.height]
-        case let element as AccessibilityElement:
+        case let element as Element:
             if readElements {
                 return try await element.dump()
             } else {
                 return "Element"
             }
-        case let error as AccessibilityError:
+        case let error as ConsumerError:
             return "Error: \(error.localizedDescription)"
         default:
             return nil

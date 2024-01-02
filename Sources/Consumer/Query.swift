@@ -1,5 +1,5 @@
 /// Parameterized attribute queries.
-enum AccessibilityQuery: String {
+public enum Query: String {
     // Text attributes.
     case lineForIndex = "AXLineForIndex"
     case rangeForLine = "AXRangeForLine"

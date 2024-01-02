@@ -1,7 +1,7 @@
 import ApplicationServices
 
 /// Translator of legacy ``AXError`` values to a Swift type.
-enum AccessibilityError: Error {
+public enum ConsumerError: Error {
     case success
     case systemFailure
     case illegalArgument
@@ -97,7 +97,7 @@ enum AccessibilityError: Error {
         }
     }
 
-    /// This error as a legacy error value.
+    /// Converts this error to a legacy error value.
     func toAXError() -> AXError {
         switch self {
         case .success:
