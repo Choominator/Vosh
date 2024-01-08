@@ -62,6 +62,10 @@ import IOKit
         IOHIDGetModifierLockState(connect, Int32(kIOHIDCapsLockState), &state.capsLockEnabled)
         let keyboardTapCallback: CGEventTapCallBack = {(_, _, event, this) in
             let this = Unmanaged<InputHandler>.fromOpaque(this!).takeUnretainedValue()
+            guard event.type != CGEventType.tapDisabledByTimeout else {
+                CGEvent.tapEnable(tap: this.eventTap, enable: true)
+                return nil
+            }
             guard this.state.capsLockPressed || this.state.browseModeEnabled else {
                 return Unmanaged.passUnretained(event)
             }
