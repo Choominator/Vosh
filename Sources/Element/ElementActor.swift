@@ -1,9 +1,9 @@
 import Foundation
 
 /// Dedicated thread to ensure that all interactions with the accessibility client interface run free of race conditions.
-@globalActor public actor ConsumerActor {
+@globalActor public actor ElementActor {
     /// Shared singleton.
-    public static let shared = ConsumerActor()
+    public static let shared = ElementActor()
     /// Executor used by this actor.
     public static let sharedUnownedExecutor = Executor.shared.asUnownedSerialExecutor()
 
@@ -15,11 +15,11 @@ import Foundation
     ///   - resultType: Return type of the scheduled function.
     ///   - run: Function to run.
     /// - Returns: Whatever the function returns.
-    public static func run<T: Sendable>(resultType _: T.Type = T.self, body run: @ConsumerActor () throws -> T) async rethrows -> T {
+    public static func run<T: Sendable>(resultType _: T.Type = T.self, body run: @ElementActor () throws -> T) async rethrows -> T {
         return try await run()
     }
 
-    /// Custom executor supporting ``ConsumerActor``.
+    /// Custom executor supporting ``ElementActor``.
     public final class Executor: SerialExecutor, @unchecked Sendable {
         /// Dedicated thread on which this executor will schedule jobs.
         // This object is not Sendable, but it's also never dereferenced from a different thread after being constructed.
@@ -41,7 +41,7 @@ import Foundation
                 runLoop.run()
             }
             lock.lock(whenCondition: 1)
-            thread.name = "Accessibility"
+            thread.name = "Element"
             lock.unlock(withCondition: 0)
         }
 

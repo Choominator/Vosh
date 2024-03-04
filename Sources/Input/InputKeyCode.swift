@@ -1,7 +1,5 @@
-import CoreGraphics
-
 /// Window server tap event key codes for US ANSI keyboards.
-public enum KeyCode: Int64 {
+public enum InputKeyCode: Int64 {
     case keyboardA = 0x0
     case keyboardB = 0xb
     case keyboardC = 0x8

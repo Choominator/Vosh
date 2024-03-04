@@ -4,23 +4,11 @@ Vosh, a contraction between Vision and Macintosh, is my attempt at creating a sc
 
 This project depends on very poorly documented APIs from Apple, and as such I cannot guarantee anything about its future, but will continue to work on it for as long as I can keep coming up with ways to work around the MacOS consumer-side accessibility API's quirks. Will it ever be able to compete with VoiceOver? I'm not sure, but my motivation is also fueled by the challenge to find solutions for hard problems even if what I do ends up not being very useful.
 
-At the moment you can already navigate apps that have windows and can become active including Safari, however there are a number of major issues to solve before I can even consider this code ready for testing, such as:
-
-* Figure out a way to determine when the text caret hits a boundary;
-* Make announcements on text deletions;
-* Figure out a heuristic to distinguish between interesting and non-interesting elements;
-* Handle windowless content such as the Desktop in Finder properly;
-* Provide accessibility to applications whose activation policies are either accessory or prohibited such as Vosh itself;
-* Provide Braille support;
-* Figure out how to do audio ducking;
-* Implement support for semantic navigation of web content;
-* Add support for custom rotors.
-
-If you wish to help, the most pressing issue is finding patterns that can be used to flatten the navigation and distinguish between interesting and non-interesting accessibility elements so that I can create a proper element classifying heuristic. For this reason I've included a functionality that will either dump all the accessibility elements of the currently active application or rooted in the currently focused element to a property list file that you can attach to a GitHub issue (read below for the key bindings required to do this).
+At the moment you can already navigate apps that have windows and can become active including Safari, however there are a number of major issues to solve before I can even consider this code ready for testing. If you wish to help, check out the the project's issues page, which I will be updating with new issues as I become aware of them.
 
 ## Building
 
-Before we begin I strongly recommend you to try this in a virtual machine, because even if you trust me (which you shouldn't) this software might have bugs and security issues and the instructions provided here will require granting Terminal and any application run from it the ability control your computer, unless you remember to revoke those permissions later.
+Before you begin, I strongly recommend you to try this on a virtual machine, because even if you trust me (which you shouldn't) this software might have bugs and security issues and the instructions provided here will require granting Terminal and any application run from it the ability control your computer, unless you remember to revoke those permissions later.
 
 Vosh is distributed as a Swift package, so in order to build it you will need at least Xcode's command-line tools, however don't worry much about it since MacOS will prompt you and guide you through their installation process once you start entering the commands below. Xcode is also supported, and you will likely want to use it if you decide to tinker with the code, but the advantage of the command-line is that it makes it much easier to provide instructions on the Internet. If you don't feel comfortable following these instructions then you are not yet the target audience for this project.
 
@@ -28,7 +16,7 @@ Start off by downloading this git repository by typing:
 
     git clone https://github.com/Choominator/Vosh.git
 
-If everything goes right you should now have a new directory named Vosh in your current working directory, so type the following to get inside:
+If everything goes well you should now have a new directory named Vosh in your current working directory, so type the following to get inside:
 
     cd Vosh
 
@@ -86,10 +74,11 @@ The following is the list of key combinations currently supported by Vosh:
 * Vosh+Right - Focus the next element;
 * Vosh+Down - Focus the first child of the focused element;
 * Vosh+Up - Focus the parent of the focused element;
+* Vosh+Slash - Dump the system-wide element to a property list file;
 * Vosh+Period - Dump all elements of the active application to a property list file;
 * Vosh+Comma - Dump the focused element and all its children to a property list file;
 * Control - Interrupt speech.
 
 At present, the only user interfaces presented by Vosh are the save panel where you can choose the location of the element dump property list files and a menu extras that can be used to exit Vosh, though neither of these interfaces work with Vosh itself, and even VoiceOver has very poor support for graphical user interfaces in modal windows, so expect some accessibility issues using them.
 
-The element dumping commands are used to provide information that can be attached to issues for me to analyze on bug reports. These commands dump the hierarchy of an accessible application or a focused element within an accessible application complete with all of their respective attribute values, meaning that the dump files might contain personal or confidential information, which is yet another reason to only run this project in a virtual machine.
+The element dumping commands are used to provide information that can be attached to issues for me to analyze on bug reports. These commands dump the hierarchy of an accessible application or a focused element within an accessible application complete with all of their respective attribute values, meaning that the dump files might contain personal or confidential information, which is yet another reason to only run this project on a virtual machine.

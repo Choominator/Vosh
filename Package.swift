@@ -5,18 +5,30 @@ import PackageDescription
 let package = Package(
     name: "Vosh",
     platforms: [.macOS(.v14)],
-    products: [.executable(name: "Vosh", targets: ["Entry"])],
+    products: [.executable(name: "Vosh", targets: ["Vosh"])],
     targets: [
         .executableTarget(
-            name: "Entry",
+            name: "Vosh",
+            dependencies: [
+                .byName(name: "Element"),
+                .byName(name: "Access"),
+                .byName(name: "Input"),
+                .byName(name: "Output")
+            ]
+        ),
+        .target(
+            name: "Access",
             dependencies: [
                 .byName(name: "Input"),
                 .byName(name: "Output"),
-                .byName(name: "Consumer")
+                .byName(name: "Element")
             ]
         ),
-        .target(name: "Input"),
-        .target(name: "Output", dependencies: [.byName(name: "Consumer")]),
-        .target(name: "Consumer")
+        .target(
+            name: "Input",
+            dependencies: [.byName(name: "Output")]
+        ),
+        .target(name: "Output"),
+        .target(name: "Element")
     ]
 )

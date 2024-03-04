@@ -1,5 +1,5 @@
 /// Low level system key codes for modifier keys.
-public enum ModifierKeyCode: UInt32 {
+public enum InputModifierKeyCode: UInt32 {
     case capsLock = 0x39
     case leftShift = 0xe1
     case leftControl = 0xe0

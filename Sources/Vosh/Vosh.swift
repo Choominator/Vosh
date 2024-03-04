@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Entry point and user interface.
-@main struct Entry: App {
+@main struct Vosh: App {
     @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
 
     var body: some Scene {

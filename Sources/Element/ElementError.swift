@@ -1,7 +1,7 @@
 import ApplicationServices
 
 /// Translator of legacy ``AXError`` values to a Swift type.
-public enum ConsumerError: Error {
+public enum ElementError: Error, CustomStringConvertible {
     case success
     case systemFailure
     case illegalArgument
@@ -16,10 +16,10 @@ public enum ConsumerError: Error {
     case notificationNotRegistered
     case apiDisabled
     case noValue
-    case queryUnsupported
+    case parameterizedAttributeUnsupported
     case notEnoughPrecision
 
-    var localizedDescription: String {
+    public var description: String {
         switch self {
         case .success:
             return "Success"
@@ -39,7 +39,7 @@ public enum ConsumerError: Error {
             return "Action unsupported"
         case .notificationUnsupported:
             return "Notification unsupported"
-        case .queryUnsupported:
+        case .parameterizedAttributeUnsupported:
             return "Parameterized attribute unsupported"
         case .notImplemented:
             return "Accessibility not supported"
@@ -79,7 +79,7 @@ public enum ConsumerError: Error {
         case .notificationUnsupported:
             self = .notificationUnsupported
         case .parameterizedAttributeUnsupported:
-            self = .queryUnsupported
+            self = .parameterizedAttributeUnsupported
         case .notImplemented:
             self = .notImplemented
         case .notificationAlreadyRegistered:
@@ -118,7 +118,7 @@ public enum ConsumerError: Error {
             return .actionUnsupported
         case .notificationUnsupported:
             return .notificationUnsupported
-        case .queryUnsupported:
+        case .parameterizedAttributeUnsupported:
             return .parameterizedAttributeUnsupported
         case .notImplemented:
             return .notImplemented

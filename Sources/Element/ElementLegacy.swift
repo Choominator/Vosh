@@ -2,16 +2,14 @@ import Foundation
 import ApplicationServices
 
 /// Declares the required functionality for any Swift type that can be converted to and from a CoreFoundation type.
-protocol LegacyConvertible {
-    /// CoreFoundation type.
-    associatedtype LegacyType
+protocol ElementLegacy {
     /// Initializes a new Swift type by converting from a legacy CoreFoundation type.
     init?(legacyValue value: CFTypeRef)
     /// Converts this Swift type to a legacy CoreFoundation type.
-    var legacyValue: LegacyType {get}
+    var legacyValue: CFTypeRef {get}
 }
 
-extension Optional where Wrapped: LegacyConvertible {
+extension Optional where Wrapped: ElementLegacy {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) != CFNullGetTypeID() else {
             return nil
@@ -29,7 +27,7 @@ extension Optional where Wrapped: LegacyConvertible {
     }
 }
 
-extension Bool: LegacyConvertible {
+extension Bool: ElementLegacy {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == CFBooleanGetTypeID() else {
             return nil
@@ -38,12 +36,12 @@ extension Bool: LegacyConvertible {
         self = CFBooleanGetValue(boolean)
     }
 
-    var legacyValue: CFBoolean {
+    var legacyValue: CFTypeRef {
         return self ? kCFBooleanTrue : kCFBooleanFalse
     }
 }
 
-extension Int64: LegacyConvertible {
+extension Int64: ElementLegacy {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == CFNumberGetTypeID() else {
             return nil
@@ -59,13 +57,13 @@ extension Int64: LegacyConvertible {
         self = integer
     }
 
-    var legacyValue: CFNumber {
+    var legacyValue: CFTypeRef {
         var integer = self
         return CFNumberCreate(nil, .sInt64Type, &integer)
     }
 }
 
-extension Double: LegacyConvertible {
+extension Double: ElementLegacy {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == CFNumberGetTypeID() else {
             return nil
@@ -81,13 +79,13 @@ extension Double: LegacyConvertible {
         self = float
     }
 
-    var legacyValue: CFNumber {
+    var legacyValue: CFTypeRef {
         var float = self
         return CFNumberCreate(nil, .doubleType, &float)
     }
 }
 
-extension String: LegacyConvertible {
+extension String: ElementLegacy {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == CFStringGetTypeID() else {
             return nil
@@ -95,12 +93,12 @@ extension String: LegacyConvertible {
         self = unsafeBitCast(value, to: CFString.self) as String
     }
 
-    var legacyValue: CFString {
+    var legacyValue: CFTypeRef {
         return self as CFString
     }
 }
 
-extension [Any?]: LegacyConvertible {
+extension [Any?]: ElementLegacy {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == CFArrayGetTypeID() else {
             return nil
@@ -113,12 +111,12 @@ extension [Any?]: LegacyConvertible {
         }
     }
 
-    var legacyValue: CFArray {
+    var legacyValue: CFTypeRef {
         return self as CFArray
     }
 }
 
-extension [String: Any]: LegacyConvertible {
+extension [String: Any]: ElementLegacy {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == CFDictionaryGetTypeID() else {
             return nil
@@ -134,12 +132,12 @@ extension [String: Any]: LegacyConvertible {
         }
     }
 
-    var legacyValue: CFDictionary {
+    var legacyValue: CFTypeRef {
         return self as CFDictionary
     }
 }
 
-extension URL: LegacyConvertible {
+extension URL: ElementLegacy {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == CFURLGetTypeID() else {
             return nil
@@ -148,12 +146,12 @@ extension URL: LegacyConvertible {
         self = url as URL
     }
 
-    var legacyValue: CFURL {
+    var legacyValue: CFTypeRef {
         return self as CFURL
     }
 }
 
-extension AttributedString: LegacyConvertible {
+extension AttributedString: ElementLegacy {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == CFAttributedStringGetTypeID() else {
             return nil
@@ -162,12 +160,12 @@ extension AttributedString: LegacyConvertible {
         self = AttributedString(attributedString as NSAttributedString)
     }
 
-    var legacyValue: CFAttributedString {
+    var legacyValue: CFTypeRef {
         return NSAttributedString(self) as CFAttributedString
     }
 }
 
-extension Range: LegacyConvertible where Bound == Int {
+extension Range: ElementLegacy where Bound == Int {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == AXValueGetTypeID() else {
             return nil
@@ -180,13 +178,13 @@ extension Range: LegacyConvertible where Bound == Int {
         self = Int(range.location) ..< Int(range.location + range.length)
     }
 
-    var legacyValue: AXValue {
+    var legacyValue: CFTypeRef {
         var range = CFRangeMake(self.lowerBound, self.upperBound - self.lowerBound)
         return AXValueCreate(.cfRange, &range)!
     }
 }
 
-extension CGPoint: LegacyConvertible {
+extension CGPoint: ElementLegacy {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == AXValueGetTypeID() else {
             return nil
@@ -199,13 +197,13 @@ extension CGPoint: LegacyConvertible {
         self = point
     }
 
-    var legacyValue: AXValue {
+    var legacyValue: CFTypeRef {
         var point = self
         return AXValueCreate(.cgPoint, &point)!
     }
 }
 
-extension CGSize: LegacyConvertible {
+extension CGSize: ElementLegacy {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == AXValueGetTypeID() else {
             return nil
@@ -218,13 +216,13 @@ extension CGSize: LegacyConvertible {
         self = size
     }
 
-    var legacyValue: AXValue {
+    var legacyValue: CFTypeRef {
         var size = self
         return AXValueCreate(.cgSize, &size)!
     }
 }
 
-extension CGRect: LegacyConvertible {
+extension CGRect: ElementLegacy {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == AXValueGetTypeID() else {
             return nil
@@ -237,13 +235,13 @@ extension CGRect: LegacyConvertible {
         self = rect
     }
 
-    var legacyValue: AXValue {
+    var legacyValue: CFTypeRef {
         var rect = self
         return AXValueCreate(.cgRect, &rect)!
     }
 }
 
-extension ConsumerError: LegacyConvertible {
+extension ElementError: ElementLegacy {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == AXValueGetTypeID() else {
             return nil
@@ -253,16 +251,16 @@ extension ConsumerError: LegacyConvertible {
         guard AXValueGetValue(value, .axError, &error) else {
             return nil
         }
-        self = ConsumerError(from: error)
+        self = ElementError(from: error)
     }
 
-    var legacyValue: AXValue {
+    var legacyValue: CFTypeRef {
         var error = self.toAXError()
         return AXValueCreate(.axError, &error)!
     }
 }
 
-extension Element: LegacyConvertible {}
+extension Element: ElementLegacy {}
 
 /// Converts a value from any known legacy type to a Swift type.
 /// - Parameter value: Value to convert.
@@ -310,7 +308,7 @@ func fromLegacy(value: CFTypeRef?) -> Any? {
     if let rect = CGRect(legacyValue: value) {
         return rect
     }
-    if let error = ConsumerError(legacyValue: value) {
+    if let error = ElementError(legacyValue: value) {
         return error
     }
     if let element = Element(legacyValue: value) {

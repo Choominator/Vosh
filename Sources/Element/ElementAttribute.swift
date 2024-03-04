@@ -1,5 +1,5 @@
 /// Non-comprehensive list of element attributes.
-public enum Attribute: String {
+public enum ElementAttribute: String {
     // Informational attributes.
     case role = "AXRole"
     case subrole = "AXSubrole"
@@ -10,8 +10,8 @@ public enum Attribute: String {
 
     // Hierarchical relationship attributes.
     case parentElement = "AXParent"
-    case childrenElements = "AXChildren"
-    case navigationOrderedChildrenElements = "AXChildrenInNavigationOrder"
+    case childElements = "AXChildren"
+    case childElementsInNavigationOrder = "AXChildrenInNavigationOrder"
     case selectedChildrenElements = "AXSelectedChildren"
     case visibleChildrenElements = "AXVisibleChildren"
     case windowElement = "AXWindow"
@@ -20,6 +20,7 @@ public enum Attribute: String {
     case servesAsTitleForElement = "AXServesAsTitleForUIElement"
     case linkedElements = "AXLinkedUIElements"
     case sharedFocusElements = "AXSharedFocusElements"
+    case focusableAncestor = "AXFocusableAncestor"
 
     // Visual state attributes.
     case isEnabled = "AXEnabled"
@@ -35,6 +36,7 @@ public enum Attribute: String {
     case valueIncrement = "AXValueIncrement"
     case valueWraps = "AXValueWraps"
     case allowedValues = "AXAllowedValues"
+    case placeholderValue = "AXPlaceholderValue"
 
     // Text-specific attributes.
     case selectedText = "AXSelectedText"
@@ -85,6 +87,7 @@ public enum Attribute: String {
     case columns = "AXColumns"
     case visibleColumns = "AXVisibleColumns"
     case selectedColumns = "AXSelectedColumns"
+    case selectedCells = "AXSelectedCells"
     case sortDirection = "AXSortDirection"
     case columnHeaderElements = "AXColumnHeaderUIElements"
     case index = "AXIndex"
@@ -125,5 +128,4 @@ public enum Attribute: String {
     // Level indicator attributes.
     case warningValue = "AXWarningValue"
     case criticalValue = "AXCriticalValue"
-    case hasWebApplicationAncestor = "AXHasWebApplicationAncestor"
 }

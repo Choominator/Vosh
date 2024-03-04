@@ -1,5 +1,5 @@
 /// Parameterized attribute queries.
-public enum Query: String {
+public enum ElementParameterizedAttribute: String {
     // Text attributes.
     case lineForIndex = "AXLineForIndex"
     case rangeForLine = "AXRangeForLine"
