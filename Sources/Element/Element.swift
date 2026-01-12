@@ -1,28 +1,25 @@
-import ApplicationServices
+@preconcurrency import ApplicationServices
 
 /// Swift wrapper for a legacy ``AXUIElement``.
 @ElementActor public struct Element {
-    /// Legacy value.
-    let legacyValue: CFTypeRef
+    // Legacy element.
+    let element: AXUIElement
 
     /// Creates a system-wide element.
     public init() {
-        legacyValue = AXUIElementCreateSystemWide()
+        element = AXUIElementCreateSystemWide()
     }
 
     /// Creates an application element for the specified PID.
     /// - Parameter processIdentifier: PID of the application.
     public init(processIdentifier: pid_t) {
-        legacyValue = AXUIElementCreateApplication(processIdentifier)
+        element = AXUIElementCreateApplication(processIdentifier)
     }
 
     /// Wraps a legacy ``AXUIElement``.
     /// - Parameter value: Legacy value to wrap.
-    nonisolated init?(legacyValue value: CFTypeRef) {
-        guard CFGetTypeID(value) == AXUIElementGetTypeID() else {
-            return nil
-        }
-        legacyValue = unsafeBitCast(value, to: AXUIElement.self)
+    init(element: AXUIElement) {
+        self.element = element
     }
 
     /// Creates the element corresponding to the application of the specified element.
@@ -35,9 +32,8 @@ import ApplicationServices
     /// Reads the process identifier of this element.
     /// - Returns: Process identifier.
     public func getProcessIdentifier() throws -> pid_t {
-        let legacyValue = legacyValue as! AXUIElement
         var processIdentifier = pid_t(0)
-        let result = AXUIElementGetPid(legacyValue, &processIdentifier)
+        let result = AXUIElementGetPid(element, &processIdentifier)
         let error = ElementError(from: result)
         switch error {
         case .success:
@@ -53,8 +49,7 @@ import ApplicationServices
     /// Sets the timeout of requests made to this element.
     /// - Parameter seconds: Timeout in seconds.
     public func setTimeout(seconds: Float) throws {
-        let legacyValue = legacyValue as! AXUIElement
-        let result = AXUIElementSetMessagingTimeout(legacyValue, seconds)
+        let result = AXUIElementSetMessagingTimeout(element, seconds)
         let error = ElementError(from: result)
         switch error {
         case .success:
@@ -71,11 +66,11 @@ import ApplicationServices
     ///   - recursiveParents: Whether to recursively dump this element's parents.
     ///   - recursiveChildren: Whether to recursively dump this element's children.
     /// - Returns: Serializable element structure.
-    public func dump(recursiveParents: Bool = true, recursiveChildren: Bool = true) async throws -> [String: Any]? {
+    public func dump(recursiveParents: Bool = true, recursiveChildren: Bool = true) async throws -> [String: Sendable]? {
         do {
-            var root = [String: Any]()
+            var root = [String: Sendable]()
             let attributes = try listAttributes()
-            var attributeValues = [String: Any]()
+            var attributeValues = [String: Sendable]()
             for attribute in attributes {
                 guard let value = try getAttribute(attribute) else {
                     continue
@@ -83,7 +78,7 @@ import ApplicationServices
                 attributeValues[attribute] = encode(value: value)
             }
             root["attributes"] = attributeValues
-            guard legacyValue as! AXUIElement != AXUIElementCreateSystemWide() else {
+            guard element != AXUIElementCreateSystemWide() else {
                 return root
             }
             let parameterizedAttributes = try listParameterizedAttributes()
@@ -93,7 +88,7 @@ import ApplicationServices
                 root["parent"] = try await parent.dump(recursiveParents: true, recursiveChildren: false)
             }
             if recursiveChildren, let children = try getAttribute("AXChildren") as? [Any?] {
-                var resultingChildren = [Any]()
+                var resultingChildren = [Sendable]()
                 for child in children.lazy.compactMap({$0 as? Element}) {
                     guard let child = try await child.dump(recursiveParents: false, recursiveChildren: true) else {
                         continue
@@ -120,7 +115,7 @@ import ApplicationServices
     /// Reads the value associated with a given attribute of this element.
     /// - Parameter attribute: Attribute whose value is to be read.
     /// - Returns: Value of the attribute, if any.
-    public func getAttribute(_ attribute: ElementAttribute) throws -> Any? {
+    public func getAttribute(_ attribute: ElementAttribute) throws -> Sendable? {
         let output = try getAttribute(attribute.rawValue)
         if attribute == .role, let output = output as? String {
             return ElementRole(rawValue: output)
@@ -135,7 +130,7 @@ import ApplicationServices
     /// - Parameters:
     ///   - attribute: Attribute to be written.
     ///   - value: Value to write.
-    public func setAttribute(_ attribute: ElementAttribute, value: Any) throws {
+    public func setAttribute(_ attribute: ElementAttribute, value: Sendable) throws {
         return try setAttribute(attribute.rawValue, value: value)
     }
 
@@ -151,16 +146,15 @@ import ApplicationServices
     ///   - attribute: Parameterized attribute to query.
     ///   - input: Input value.
     /// - Returns: Output value.
-    public func queryParameterizedAttribute(_ attribute: ElementParameterizedAttribute, input: Any) throws -> Any? {
+    public func queryParameterizedAttribute(_ attribute: ElementParameterizedAttribute, input: Sendable) throws -> Sendable? {
         return try queryParameterizedAttribute(attribute.rawValue, input: input)
     }
 
     /// Creates a list of all the actions supported by this element.
     /// - Returns: List of actions.
     public func listActions() throws -> [String] {
-        let legacyValue = legacyValue as! AXUIElement
         var actions: CFArray?
-        let result = AXUIElementCopyActionNames(legacyValue, &actions)
+        let result = AXUIElementCopyActionNames(element, &actions)
         let error = ElementError(from: result)
         switch error {
         case .success:
@@ -172,7 +166,7 @@ import ApplicationServices
         default:
             fatalError("Unexpected error reading an accessibility elenet's action names: \(error)")
         }
-        guard let actions = [Any?](legacyValue: actions as CFTypeRef) else {
+        guard let actions = [Sendable?](legacyValue: actions as CFTypeRef) else {
             return []
         }
         return actions.compactMap({$0 as? String})
@@ -182,9 +176,8 @@ import ApplicationServices
     /// - Parameter action: Action to query.
     /// - Returns: Description of the action.
     public func describeAction(_ action: String) throws -> String? {
-        let legacyValue = legacyValue as! AXUIElement
         var description: CFString?
-        let result = AXUIElementCopyActionDescription(legacyValue, action as CFString, &description)
+        let result = AXUIElementCopyActionDescription(element, action as CFString, &description)
         let error = ElementError(from: result)
         switch error {
         case .success:
@@ -205,8 +198,7 @@ import ApplicationServices
     /// Performs the specified action on this element.
     /// - Parameter action: Action to perform.
     public func performAction(_ action: String) throws {
-        let legacyValue = legacyValue as! AXUIElement
-        let result = AXUIElementPerformAction(legacyValue, action as CFString)
+        let result = AXUIElementPerformAction(element, action as CFString)
         let error = ElementError(from: result)
         switch error {
         case .success, .systemFailure, .illegalArgument:
@@ -221,9 +213,8 @@ import ApplicationServices
     /// Creates a list of all the known attributes of this element.
     /// - Returns: List of attributes.
     private func listAttributes() throws -> [String] {
-        let legacyValue = legacyValue as! AXUIElement
         var attributes: CFArray?
-        let result = AXUIElementCopyAttributeNames(legacyValue, &attributes)
+        let result = AXUIElementCopyAttributeNames(element, &attributes)
         let error = ElementError(from: result)
         switch error {
         case .success:
@@ -233,7 +224,7 @@ import ApplicationServices
         default:
             fatalError("Unexpected error reading an accessibility element's attribute names: \(error)")
         }
-        guard let attributes = [Any?](legacyValue: attributes as CFTypeRef) else {
+        guard let attributes = [Sendable?](legacyValue: attributes as CFTypeRef) else {
             return []
         }
         return attributes.compactMap({$0 as? String})
@@ -242,10 +233,9 @@ import ApplicationServices
     /// Reads the value associated with a given attribute of this element.
     /// - Parameter attribute: Attribute whose value is to be read.
     /// - Returns: Value of the attribute, if any.
-    private func getAttribute(_ attribute: String) throws -> Any? {
-        let legacyValue = legacyValue as! AXUIElement
+    private func getAttribute(_ attribute: String) throws -> Sendable? {
         var value: CFTypeRef?
-        let result = AXUIElementCopyAttributeValue(legacyValue, attribute as CFString, &value)
+        let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
         let error = ElementError(from: result)
         switch error {
         case .success:
@@ -267,12 +257,11 @@ import ApplicationServices
     /// - Parameters:
     ///   - attribute: Attribute to be written.
     ///   - value: Value to write.
-    private func setAttribute(_ attribute: String, value: Any) throws {
-        let legacyValue = legacyValue as! AXUIElement
+    private func setAttribute(_ attribute: String, value: Sendable) throws {
         guard let value = value as? any ElementLegacy else {
             throw ElementError.illegalArgument
         }
-        let result = AXUIElementSetAttributeValue(legacyValue, attribute as CFString, value.legacyValue as CFTypeRef)
+        let result = AXUIElementSetAttributeValue(element, attribute as CFString, value as CFTypeRef)
         let error = ElementError(from: result)
         switch error {
         case .success, .systemFailure, .attributeUnsupported, .illegalArgument:
@@ -287,9 +276,8 @@ import ApplicationServices
     /// Lists the parameterized attributes available to this element.
     /// - Returns: List of parameterized attributes.
     private func listParameterizedAttributes() throws -> [String] {
-        let legacyValue = legacyValue as! AXUIElement
         var parameterizedAttributes: CFArray?
-        let result = AXUIElementCopyParameterizedAttributeNames(legacyValue, &parameterizedAttributes)
+        let result = AXUIElementCopyParameterizedAttributeNames(element, &parameterizedAttributes)
         let error = ElementError(from: result)
         switch error {
         case .success:
@@ -299,7 +287,7 @@ import ApplicationServices
         default:
             fatalError("Unexpected error reading an accessibility element's parameterized attribute names: \(error)")
         }
-        guard let parameterizedAttributes = [Any?](legacyValue: parameterizedAttributes as CFTypeRef) else {
+        guard let parameterizedAttributes = [Sendable?](legacyValue: parameterizedAttributes as CFTypeRef) else {
             return []
         }
         return parameterizedAttributes.compactMap({$0 as? String})
@@ -310,13 +298,12 @@ import ApplicationServices
     ///   - attribute: Parameterized attribute to query.
     ///   - input: Input value.
     /// - Returns: Output value.
-    private func queryParameterizedAttribute(_ attribute: String, input: Any) throws -> Any? {
-        let legacyValue = legacyValue as! AXUIElement
+    private func queryParameterizedAttribute(_ attribute: String, input: Sendable) throws -> Sendable? {
         guard let input = input as? any ElementLegacy else {
             throw ElementError.illegalArgument
         }
         var output: CFTypeRef?
-        let result = AXUIElementCopyParameterizedAttributeValue(legacyValue, attribute as CFString, input.legacyValue as CFTypeRef, &output)
+        let result = AXUIElementCopyParameterizedAttributeValue(element, attribute as CFString, input.legacyValue as CFTypeRef, &output)
         let error = ElementError(from: result)
         switch error {
         case .success:
@@ -334,12 +321,12 @@ import ApplicationServices
     /// Encodes a value into a format suitable to be serialized.
     /// - Parameter value: Value to encode.
     /// - Returns: Data structure suitable to be serialized.
-    private func encode(value: Any) -> Any? {
+    private func encode(value: Sendable) -> Sendable? {
         switch value {
         case is Bool, is Int64, is Double, is String:
             return value
-        case let array as [Any?]:
-            var resultArray = [Any]()
+        case let array as [Sendable?]:
+            var resultArray = [Sendable]()
             resultArray.reserveCapacity(array.count)
             for element in array {
                 guard let element = element, let element = encode(value: element) else {
@@ -348,8 +335,8 @@ import ApplicationServices
                 resultArray.append(element)
             }
             return resultArray
-        case let dictionary as [String: Any]:
-            var resultDictionary = [String: Any]()
+        case let dictionary as [String: Sendable]:
+            var resultDictionary = [String: Sendable]()
             resultDictionary.reserveCapacity(dictionary.count)
             for pair in dictionary {
                 guard let value = encode(value: pair.value) else {
@@ -369,7 +356,7 @@ import ApplicationServices
         case let rect as CGRect:
             return ["x": rect.origin.x, "y": rect.origin.y, "width": rect.size.width, "height": rect.size.height]
         case let element as Element:
-            return String(describing: element.legacyValue)
+            return String(describing: element.element)
         case let error as ElementError:
             return "Error: \(error.localizedDescription)"
         default:
@@ -377,21 +364,32 @@ import ApplicationServices
         }
     }
 
-    /// Checks whether this process is trusted and prompts the user to grant it accessibility privileges if it isn't.
+    /// Checks whether this process is trusted, prompts the user to grant accessibility privileges if it isn't, and waits until they do or the task is cancelled.
     /// - Returns: Whether this process has accessibility privileges.
-    @MainActor public static func confirmProcessTrustedStatus() -> Bool {
-        return AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)
+    @MainActor public static func confirmProcessTrustedStatus() async -> Bool {
+        print("Permission already granted")
+        if AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary) {return true}
+        print("Asking for permission")
+        do {
+            while !AXIsProcessTrusted() {
+                try await Task.sleep(for: .seconds(1))
+            }
+        } catch {
+            print("Permission denied")
+            return false
+        }
+        print("Permission granted")
+        return true
     }
 }
 
 extension Element: Hashable {
     public nonisolated func hash(into hasher: inout Hasher) {
-        hasher.combine(legacyValue as! AXUIElement)
+        let hashValue = ElementActor.Executor.shared.perform({element.hashValue})
+        hasher.combine(hashValue)
     }
 
     public static nonisolated func ==(_ lhs: Element, _ rhs: Element) -> Bool {
-        let lhs = lhs.legacyValue as! AXUIElement
-        let rhs = rhs.legacyValue as! AXUIElement
-        return lhs == rhs
+        return ElementActor.Executor.shared.perform({lhs.element == rhs.element})
     }
 }

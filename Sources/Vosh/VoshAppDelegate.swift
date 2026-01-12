@@ -15,7 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.agent = agent
             }
             if agent == nil {
-                await Output.shared.announce("Vosh failed to start!")
+                Output.shared.announce("Vosh failed to start!")
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
                 NSApplication.shared.terminate(nil)
             }

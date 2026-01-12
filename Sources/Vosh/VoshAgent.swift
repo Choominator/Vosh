@@ -8,9 +8,7 @@ import Input
 
     /// Creates the user agent.
     init?() async {
-        guard let access = await Access() else {
-            return nil
-        }
+        guard let access = await Access() else {return nil}
         await access.setTimeout(seconds: 5.0)
         self.access = access
         Input.shared.bindKey(key: .keyboardTab, action: {[weak self] in await self?.access.readFocus()})

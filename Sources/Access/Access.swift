@@ -33,7 +33,7 @@ import Output
                 while let event = await eventIterator?.next() {
                     await handleEvent(event)
                 }
-                try? await Task.sleep(nanoseconds: 100_000_000)
+                try? await Task.sleep(for: .seconds(0.1))
             }
         }
         await refocus(processIdentifier: NSWorkspace.shared.frontmostApplication?.processIdentifier)
@@ -63,11 +63,11 @@ import Output
         do {
             guard let focus = focus else {
                 let content = [OutputSemantic.noFocus]
-                await Output.shared.convey(content)
+                Output.shared.convey(content)
                 return
             }
             let content = try await focus.reader.read()
-            await Output.shared.convey(content)
+            Output.shared.convey(content)
         } catch {
             await handleError(error)
         }
@@ -78,13 +78,13 @@ import Output
         do {
             guard let oldFocus = focus else {
                 let content = [OutputSemantic.noFocus]
-                await Output.shared.convey(content)
+                Output.shared.convey(content)
                 return
             }
             guard let parent = try await oldFocus.entity.getParent() else {
                 var content = [OutputSemantic.boundary]
                 content.append(contentsOf: try await oldFocus.reader.read())
-                await Output.shared.convey(content)
+                Output.shared.convey(content)
                 return
             }
             let newFocus = try await AccessFocus(on: parent)
@@ -92,7 +92,7 @@ import Output
             try await newFocus.entity.setKeyboardFocus()
             var content = [OutputSemantic.exiting]
             content.append(contentsOf: try await newFocus.reader.readSummary())
-            await Output.shared.convey(content)
+            Output.shared.convey(content)
         } catch {
             await handleError(error)
         }
@@ -104,13 +104,13 @@ import Output
         do {
             guard let oldFocus = focus else {
                 let content = [OutputSemantic.noFocus]
-                await Output.shared.convey(content)
+                Output.shared.convey(content)
                 return
             }
             guard let sibling = try await oldFocus.entity.getNextSibling(backwards: backwards) else {
                 var content = [OutputSemantic.boundary]
                 content.append(contentsOf: try await oldFocus.reader.read())
-                await Output.shared.convey(content)
+                Output.shared.convey(content)
                 return
             }
             let newFocus = try await AccessFocus(on: sibling)
@@ -118,7 +118,7 @@ import Output
             try await newFocus.entity.setKeyboardFocus()
             var content = [!backwards ? OutputSemantic.next : OutputSemantic.previous]
             content.append(contentsOf: try await newFocus.reader.read())
-            await Output.shared.convey(content)
+            Output.shared.convey(content)
         } catch {
             await handleError(error)
         }
@@ -129,13 +129,13 @@ import Output
         do {
             guard let oldFocus = focus else {
                 let content = [OutputSemantic.noFocus]
-                await Output.shared.convey(content)
+                Output.shared.convey(content)
                 return
             }
             guard let child = try await oldFocus.entity.getFirstChild() else {
                 var content = [OutputSemantic.boundary]
                 content.append(contentsOf: try await oldFocus.reader.read())
-                await Output.shared.convey(content)
+                Output.shared.convey(content)
                 return
             }
             let newFocus = try await AccessFocus(on: child)
@@ -144,7 +144,7 @@ import Output
             var content = [OutputSemantic.entering]
             content.append(contentsOf: try await oldFocus.reader.readSummary())
             content.append(contentsOf: try await newFocus.reader.read())
-            await Output.shared.convey(content)
+            Output.shared.convey(content)
         } catch {
             await handleError(error)
         }
@@ -184,7 +184,7 @@ import Output
                 observer = nil
                 focus = nil
                 let content = [OutputSemantic.noFocus]
-                await Output.shared.convey(content)
+                Output.shared.convey(content)
                 return
             }
             var content = [OutputSemantic]()
@@ -228,7 +228,7 @@ import Output
                 try await observer.subscribe(to: .elementDidAppear)
                 content.append(.noFocus)
             }
-            await Output.shared.convey(content)
+            Output.shared.convey(content)
         } catch {
             await handleError(error)
         }
@@ -241,7 +241,7 @@ import Output
             switch event.notification {
             case .applicationDidAnnounce:
                 if let announcement = event.payload?[.announcement] as? String {
-                    await Output.shared.announce(announcement)
+                    Output.shared.announce(announcement)
                 }
             case .elementDidAppear:
                 guard focus == nil else {
@@ -314,15 +314,15 @@ import Output
         switch error {
         case .apiDisabled:
             let content = [OutputSemantic.apiDisabled]
-            await Output.shared.convey(content)
+            Output.shared.convey(content)
         case .invalidElement:
             await refocus(processIdentifier: processIdentifier)
         case .notImplemented:
             let content = [OutputSemantic.notAccessible]
-            await Output.shared.convey(content)
+            Output.shared.convey(content)
         case .timeout:
             let content = [OutputSemantic.timeout]
-            await Output.shared.convey(content)
+            Output.shared.convey(content)
         default:
             Self.logger.warning("Unexpected error \(error, privacy: .public)")
             return

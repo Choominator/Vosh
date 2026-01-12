@@ -1,8 +1,8 @@
 import Foundation
-import ApplicationServices
+@preconcurrency import ApplicationServices
 
 /// Declares the required functionality for any Swift type that can be converted to and from a CoreFoundation type.
-protocol ElementLegacy {
+protocol ElementLegacy: Sendable {
     /// Initializes a new Swift type by converting from a legacy CoreFoundation type.
     init?(legacyValue value: CFTypeRef)
     /// Converts this Swift type to a legacy CoreFoundation type.
@@ -32,7 +32,7 @@ extension Bool: ElementLegacy {
         guard CFGetTypeID(value) == CFBooleanGetTypeID() else {
             return nil
         }
-        let boolean = unsafeBitCast(value, to: CFBoolean.self)
+        let boolean = unsafeDowncast(value, to: CFBoolean.self)
         self = CFBooleanGetValue(boolean)
     }
 
@@ -46,7 +46,7 @@ extension Int64: ElementLegacy {
         guard CFGetTypeID(value) == CFNumberGetTypeID() else {
             return nil
         }
-        let number = unsafeBitCast(value, to: CFNumber.self)
+        let number = unsafeDowncast(value, to: CFNumber.self)
         var integer = Int64(0)
         guard CFNumberGetValue(number, .sInt64Type, &integer) else {
             return nil
@@ -68,7 +68,7 @@ extension Double: ElementLegacy {
         guard CFGetTypeID(value) == CFNumberGetTypeID() else {
             return nil
         }
-        let number = unsafeBitCast(value, to: CFNumber.self)
+        let number = unsafeDowncast(value, to: CFNumber.self)
         var float = Double(0.0)
         guard CFNumberGetValue(number, .doubleType, &float) else {
             return nil
@@ -90,7 +90,7 @@ extension String: ElementLegacy {
         guard CFGetTypeID(value) == CFStringGetTypeID() else {
             return nil
         }
-        self = unsafeBitCast(value, to: CFString.self) as String
+        self = unsafeDowncast(value, to: CFString.self) as String
     }
 
     var legacyValue: CFTypeRef {
@@ -98,12 +98,12 @@ extension String: ElementLegacy {
     }
 }
 
-extension [Any?]: ElementLegacy {
+extension [Sendable?]: ElementLegacy {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == CFArrayGetTypeID() else {
             return nil
         }
-        let array = unsafeBitCast(value, to: CFArray.self) as! Array
+        let array = unsafeDowncast(value, to: CFArray.self) as! Array
         self = Self()
         self.reserveCapacity(array.count)
         for element in array {
@@ -116,12 +116,12 @@ extension [Any?]: ElementLegacy {
     }
 }
 
-extension [String: Any]: ElementLegacy {
+extension [String: Sendable]: ElementLegacy {
     init?(legacyValue value: CFTypeRef) {
         guard CFGetTypeID(value) == CFDictionaryGetTypeID() else {
             return nil
         }
-        let dictionary = unsafeBitCast(value, to: CFDictionary.self) as! Self
+        let dictionary = unsafeDowncast(value, to: CFDictionary.self) as! Self
         self = Self()
         self.reserveCapacity(dictionary.count)
         for pair in dictionary {
@@ -142,7 +142,7 @@ extension URL: ElementLegacy {
         guard CFGetTypeID(value) == CFURLGetTypeID() else {
             return nil
         }
-        let url = unsafeBitCast(value, to: CFURL.self)
+        let url = unsafeDowncast(value, to: CFURL.self)
         self = url as URL
     }
 
@@ -156,7 +156,7 @@ extension AttributedString: ElementLegacy {
         guard CFGetTypeID(value) == CFAttributedStringGetTypeID() else {
             return nil
         }
-        let attributedString = unsafeBitCast(value, to: CFAttributedString.self) as NSAttributedString
+        let attributedString = unsafeDowncast(value, to: CFAttributedString.self) as NSAttributedString
         self = AttributedString(attributedString as NSAttributedString)
     }
 
@@ -170,7 +170,7 @@ extension Range: ElementLegacy where Bound == Int {
         guard CFGetTypeID(value) == AXValueGetTypeID() else {
             return nil
         }
-        let value = unsafeBitCast(value, to: AXValue.self)
+        let value = unsafeDowncast(value, to: AXValue.self)
         var range = CFRangeMake(0, 0)
         guard AXValueGetValue(value, .cfRange, &range) else {
             return nil
@@ -189,7 +189,7 @@ extension CGPoint: ElementLegacy {
         guard CFGetTypeID(value) == AXValueGetTypeID() else {
             return nil
         }
-        let value = unsafeBitCast(value, to: AXValue.self)
+        let value = unsafeDowncast(value, to: AXValue.self)
         var point = CGPoint.zero
         guard AXValueGetValue(value, .cgPoint, &point) else {
             return nil
@@ -208,7 +208,7 @@ extension CGSize: ElementLegacy {
         guard CFGetTypeID(value) == AXValueGetTypeID() else {
             return nil
         }
-        let value = unsafeBitCast(value, to: AXValue.self)
+        let value = unsafeDowncast(value, to: AXValue.self)
         var size = CGSize.zero
         guard AXValueGetValue(value, .cgSize, &size) else {
             return nil
@@ -227,7 +227,7 @@ extension CGRect: ElementLegacy {
         guard CFGetTypeID(value) == AXValueGetTypeID() else {
             return nil
         }
-        let value = unsafeBitCast(value, to: AXValue.self)
+        let value = unsafeDowncast(value, to: AXValue.self)
         var rect = CGRect.zero
         guard AXValueGetValue(value, .cgRect, &rect) else {
             return nil
@@ -246,7 +246,7 @@ extension ElementError: ElementLegacy {
         guard CFGetTypeID(value) == AXValueGetTypeID() else {
             return nil
         }
-        let value = unsafeBitCast(value, to: AXValue.self)
+        let value = unsafeDowncast(value, to: AXValue.self)
         var error = AXError.success
         guard AXValueGetValue(value, .axError, &error) else {
             return nil
@@ -260,12 +260,22 @@ extension ElementError: ElementLegacy {
     }
 }
 
-extension Element: ElementLegacy {}
+extension Element: ElementLegacy {
+    nonisolated var legacyValue: CFTypeRef {ElementActor.Executor.shared.perform({element})}
+
+    nonisolated init?(legacyValue: CFTypeRef) {
+        guard CFGetTypeID(legacyValue) == AXUIElementGetTypeID() else {
+            return nil
+        }
+        let element = unsafeDowncast(legacyValue, to: AXUIElement.self)
+        self = ElementActor.Executor.shared.perform({Self(element: element)})
+    }
+}
 
 /// Converts a value from any known legacy type to a Swift type.
 /// - Parameter value: Value to convert.
 /// - Returns: Converted Swift value.
-func fromLegacy(value: CFTypeRef?) -> Any? {
+func fromLegacy(value: CFTypeRef?) -> Sendable? {
     guard let value = value else {
         return nil
     }
@@ -284,10 +294,10 @@ func fromLegacy(value: CFTypeRef?) -> Any? {
     if let string = String(legacyValue: value) {
         return string
     }
-    if let array = [Any?](legacyValue: value) {
+    if let array = [Sendable?](legacyValue: value) {
         return array
     }
-    if let dictionary = [String: Any](legacyValue: value) {
+    if let dictionary = [String: Sendable](legacyValue: value) {
         return dictionary
     }
     if let url = URL(legacyValue: value) {

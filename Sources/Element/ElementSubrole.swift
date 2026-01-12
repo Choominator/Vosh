@@ -1,5 +1,5 @@
 /// Non-comprehensive subrole list.
-public enum ElementSubrole: String {
+public enum ElementSubrole: String, Sendable {
     case closeButton = "AXCloseButton"
     case minimizeButton = "AXMinimizeButton"
     case zoomButton = "AXZoomButton"

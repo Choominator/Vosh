@@ -10,6 +10,8 @@ import ApplicationServices
     private let element: AXUIElement
     /// Event stream continuation.
     private let eventContinuation: AsyncStream<ElementEvent>.Continuation
+    /// Accessibility event loop source.
+    private let eventSource: CFRunLoopSource
 
     /// Creates a new accessibility observer for the specified element.
     /// - Parameter element: Element to observe.
@@ -20,9 +22,9 @@ import ApplicationServices
         let callBack: AXObserverCallbackWithInfo = {(_, element, notification, info, this) in
             let this = Unmanaged<ElementObserver>.fromOpaque(this!).takeUnretainedValue()
             let notification = notification as String
-            let subject = Element(legacyValue: element)!
+            let subject = Element(element: element)
             // The following hack is necessary since info is optional but isn't marked as such.
-            let payload = unsafeBitCast(info, to: Int.self) != 0 ? [String: Any](legacyValue: info) : nil
+            let payload = unsafeBitCast(info, to: Int.self) != 0 ? [String: Sendable](legacyValue: info) : nil
             let event = ElementEvent(notification: notification, subject: subject, payload: payload ?? [:])!
             this.eventContinuation.yield(event)
         }
@@ -38,10 +40,8 @@ import ApplicationServices
         }
         self.observer = observer
         (eventStream, eventContinuation) = AsyncStream<ElementEvent>.makeStream()
-        await MainActor.run() {
-            let runLoopSource = AXObserverGetRunLoopSource(observer)
-            CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .defaultMode)
-        }
+        eventSource = AXObserverGetRunLoopSource(observer)
+        CFRunLoopAddSource(ElementActor.Executor.shared.runLoop.getCFRunLoop(), eventSource, .defaultMode)
     }
 
     /// Subscribes to be notified of specific state changes of the observed element.
@@ -74,7 +74,9 @@ import ApplicationServices
         }
     }
 
-    deinit {
+    isolated deinit {
         eventContinuation.finish()
+        // Explicit removal to ensure that the unsafe event source is destroyed in actor isolation.
+        CFRunLoopRemoveSource(ElementActor.Executor.shared.runLoop.getCFRunLoop(), eventSource, .defaultMode)
     }
 }

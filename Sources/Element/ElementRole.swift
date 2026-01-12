@@ -1,5 +1,5 @@
 /// Non-comprehensive role list.
-public enum ElementRole: String {
+public enum ElementRole: String, Sendable {
     case application = "AXApplication"
     case systemWide = "AXSystemWide"
     case window = "AXWindow"

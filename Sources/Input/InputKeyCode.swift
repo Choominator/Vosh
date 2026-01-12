@@ -1,5 +1,7 @@
-/// Window server tap event key codes for US ANSI keyboards.
-public enum InputKeyCode: Int64 {
+/// Window server tap event key codes for ful-sized US ANSI Apple keyboards.
+public enum InputKeyCode: Int64, Sendable {
+    case unidentified = 0xff
+    case keyboardCapsLock = 0x39
     case keyboardA = 0x0
     case keyboardB = 0xb
     case keyboardC = 0x8

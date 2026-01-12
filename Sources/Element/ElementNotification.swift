@@ -1,5 +1,5 @@
 /// Event notifications.
-public enum ElementNotification: String {
+public enum ElementNotification: String, Sendable {
     // Keyboard focus events.
     case windowDidGetFocus = "AXFocusedWindowChanged"
     case elementDidGetFocus = "AXFocusedUIElementChanged"
@@ -54,6 +54,6 @@ public enum ElementNotification: String {
 }
 
 /// Non-comprehensive list of payload keys.
-public enum PayloadKey: String {
+public enum PayloadKey: String, Sendable {
     case announcement = "AXAnnouncement"
 }
