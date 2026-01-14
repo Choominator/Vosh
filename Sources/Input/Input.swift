@@ -88,8 +88,6 @@ import Output
         return hidManager
     }
 
-    /// Creates and adds a source of tapped input events to the event loop.
-    /// - Returns: Created event source instance.
     /// Sets up a tap into input events.
     /// - Returns: input tap instance.
     private func setUpInputTap() -> CFMachPort {

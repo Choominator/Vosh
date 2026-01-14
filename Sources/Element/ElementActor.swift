@@ -24,12 +24,12 @@ import Foundation
 extension ElementActor {
     /// Custom executor supporting ``ElementActor``.
     public final class Executor: SerialExecutor, @unchecked Sendable {
+        /// Run loop that provides the actual scheduling.
         // Run loops are generally not thread-safe, but scheduling execution and adding event sources to them are safe operations.
         var runLoop: RunLoop!
         /// Dedicated thread on which this executor will schedule jobs.
-        // This object is not Sendable, but it's also never dereferenced from a different thread after being constructed.
+        // This object is not Sendable, but it's also never dereferenced from a different thread except for comparing its identity with other threads after being constructed.
         private var thread: Thread!
-        /// Run loop that provides the actual scheduling.
         /// Singleton of this executor.
         public static let shared = Executor()
 
@@ -49,7 +49,7 @@ extension ElementActor {
                     return Unmanaged.passRetained(copy)
                 }
                 context.perform = { _ in
-                    assertionFailure("Accessibility idle event source fired unexpectedly")
+                    assertionFailure("Accessibility element idle event source fired unexpectedly")
                 }
                 context.version = 0
                 let source = CFRunLoopSourceCreate(kCFAllocatorDefault, 0, &context)!
@@ -88,7 +88,9 @@ extension ElementActor {
         /// - Parameter job: Job to perform.
         /// - Returns: Whatever the job returns.
         ///
-        /// This method blocks the calling thread until the provided closure returns. If the calling thread is the dedicated accessibility thread, then no scheduling is done, and the closure is invoked immediately.
+        /// ## Discussion
+        ///
+        /// This method blocks the calling thread until the provided closure returns. If the calling thread is this executor's dedicated thread, then no scheduling is done, and the closure is invoked immediately.
         public func perform<T : Sendable>(_ job: @ElementActor () -> T) -> T {
             return withoutActuallyEscaping(job) {job in
                 let job = unsafeBitCast(job, to: (@Sendable () -> T).self)
@@ -111,11 +113,18 @@ extension ElementActor.Executor {
         /// Execution result.
         var result: T!
 
+        /// Creates a new unsafe invocation for the supplied job.
+        /// - Parameter job: Job to invoke.
         init(_ job: @escaping @Sendable () -> T) {
             self.job = job
             super.init()
         }
 
+        /// Invokes the job.
+        ///
+        /// ## Discussion
+        ///
+        /// Always make sure to invoke this on the executor's managed thread.
         @objc fileprivate func invoke() {
             result = job()
         }

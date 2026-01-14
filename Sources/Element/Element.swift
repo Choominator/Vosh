@@ -367,19 +367,12 @@
     /// Checks whether this process is trusted, prompts the user to grant accessibility privileges if it isn't, and waits until they do or the task is cancelled.
     /// - Returns: Whether this process has accessibility privileges.
     @MainActor public static func confirmProcessTrustedStatus() async -> Bool {
-        print("Permission already granted")
-        if AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary) {return true}
-        print("Asking for permission")
-        do {
-            while !AXIsProcessTrusted() {
-                try await Task.sleep(for: .seconds(1))
-            }
-        } catch {
-            print("Permission denied")
-            return false
+        if AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary) {
+            print("Permission already granted")
+            return true
         }
-        print("Permission granted")
-        return true
+        print("Permission denied")
+        return false
     }
 }
 
