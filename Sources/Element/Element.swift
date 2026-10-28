@@ -1,7 +1,7 @@
 @preconcurrency import ApplicationServices
 
 /// Swift wrapper for a legacy ``AXUIElement``.
-@ElementActor public struct Element {
+@ElementActor public struct Element: Sendable {
     // Legacy element.
     let element: AXUIElement
 
