@@ -2,44 +2,39 @@ import IOKit
 import CoreGraphics
 import Foundation
 
-import Output
+import Util
 
 /// Input handler.
+///
+/// ## Discussion
+///
+/// Do not initialize until either input monitoring or automation permissions are granted.
 @MainActor public final class Input {
     /// Shared singleton.
     public static let shared = Input()
-    /// Maximum time, in milliseconds, for a key press and release sequence to be considered a click.
-    private static let clickGrace = TimeInterval(250.0)
-    /// Browse mode state.
-    public var isBrowseModeEnabled = false
+    /// Maximum time for a key press and release sequence to be considered a click.
+    private static let clickGrace = TimeInterval(0.25)
+    /// Browse mode state tracker.
+    @ObservableProperty public var isBrowseModeEnabled = false
+    /// CapsLock status source of truth.
+    @ObservableProperty public private(set) var isCapsLockEnabled = false
+    /// Emits an event every time the user presses CapsLock to interrupt speech.
+    @ObservableProperty public private(set) var speechInterruptPulse: Void = ()
     /// Configured key bindings.
     private var keyBindings = [KeyBinding: @Sendable () async -> Void]()
-    /// Cached CapsLock status.
-    private var isCapsLockEnabled = false
+
     /// Whether the current input state may indicate that the user wants to perform a key binding.
     private var isKeyBinding = false
-    /// Last CapsLock status reported as a generated input event.
-    private var reportedCapsLockStatus = false
     /// Keys pressed to execute a key combination whose release status must not be propagated even if the key combination state is disabled.
     private var quarantinedKeys = Set<InputKeyCode>()
-    /// Mach clock rate to nanoseconds conversion fraction.
-    private let timeBase: (numer: UInt64, denom: UInt64)
 
-    /// Tap into input events.
+    /// Tap into Quartz input events.
     private lazy var inputTap: CFMachPort = setUpInputTap()
-    /// Human Interface Device manager instance.
+    /// Human Interface Devices manager.
     private lazy var hidManager = setUpHIDManager()
-    /// IO event service handle.
+    /// IO event kernel handle.
     private var ioConnection = io_connect_t.zero
 
-    /// Interrupt event source.
-    private let interruptSource: AsyncStream<ModifierEvent>
-    /// Interrupt event sink.
-    private let interruptSink: AsyncStream<ModifierEvent>.Continuation
-    /// Output interrupt state machine.
-    private var interruptState: Task<Void, Never>!
-    /// Key tracked by the speech interrupt state machine.
-    private var interruptKey: InputModifierKeyCode?
     /// CapsLock toggle event source.
     private let capsLockToggleSource: AsyncStream<ModifierEvent>
     /// CapsLock toggle event sink.
@@ -48,25 +43,28 @@ import Output
     private var capsLockToggleState: Task<Void, Never>!
     /// Whether a CapsLock toggle series of events is being tracked.
     private var isTrackingCapsLockToggle = false
+    /// Last CapsLock status reported downstream as a generated input event.
+    private var reportedCapsLockStatus = false
+
+    /// Kernel clock rate to nanoseconds conversion fraction.
+    private let timeBase: (numer: UInt64, denom: UInt64)
 
     /// Creates a new input handler.
     private init() {
-        (interruptSource, interruptSink) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(16))
         (capsLockToggleSource, capsLockToggleSink) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(16))
         var timeBase = mach_timebase_info(numer: 0, denom: 0)
         mach_timebase_info(&timeBase)
         self.timeBase = (numer: UInt64(timeBase.numer), denom: UInt64(timeBase.denom))
         let mainLoop = CFRunLoopGetMain()!
-        let matches = [[kIOHIDDeviceUsagePageKey: kHIDPage_GenericDesktop, kIOHIDDeviceUsageKey: kHIDUsage_GD_Keyboard], [kIOHIDDeviceUsagePageKey: kHIDPage_GenericDesktop, kIOHIDDeviceUsageKey: kHIDUsage_GD_Keypad]]
-        IOHIDManagerSetDeviceMatchingMultiple(hidManager, matches as CFArray)
+        let match = [kIOHIDDeviceUsagePageKey: kHIDPage_GenericDesktop, kIOHIDDeviceUsageKey: kHIDUsage_GD_Keyboard]
+        IOHIDManagerSetDeviceMatching(hidManager, match as CFDictionary)
         let inputSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, inputTap, 0)
         CFRunLoopAddSource(mainLoop, inputSource, CFRunLoopMode.defaultMode)
-        interruptState = Task(operation: trackInterruptState)
         capsLockToggleState = Task(operation: trackCapsLockToggleState)
     }
 
-    /// Creates the lower level Human Interface Devices manager.
-    /// - Returns: Created HID manager instance.
+    /// Creates and configures the Human Interface Devices manager for lower level input monitoring.
+    /// - Returns: Human Interface Devices connection handle.
     private func setUpHIDManager() -> IOHIDManager {
         let mainLoop = CFRunLoopGetMain()!
         let hidManager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
@@ -112,14 +110,13 @@ import Output
 
     isolated deinit {
         IOServiceClose(ioConnection)
-        // Terminate the event streams along with their tasks.
-        interruptSink.finish()
+        // Terminate the event stream along with its task.
         capsLockToggleSink.finish()
     }
 
     /// Binds a key to an action with optional modifiers.
     /// - Parameters:
-    ///   - browseMode: Requires browse mode.
+    ///   - browseMode: Requires browse mode instead of CapsLock.
     ///   - controlModifier: Requires the Control modifier key to be pressed.
     ///   - optionModifier: Requires the Option modifier key to be pressed.
     ///   - commandModifier: Requires the Command modifier key to be pressed.
@@ -133,39 +130,12 @@ import Output
         }
     }
 
-    /// Speech interrupt state machine.
-    private func trackInterruptState() async {
-        var cursor = interruptSource.makeAsyncIterator()
-        var savedEvent = await cursor.next(isolation: #isolation)
-        while let event = savedEvent {
-            interruptKey = nil
-            // Check whether this is a Control or CapsLock key press event.
-            guard event.isActive, event.keyCode == .leftControl || event.keyCode == .rightControl || event.keyCode == .capsLock else {
-                // Unexpected first event so discard it, wait for the next event, and start over.
-                savedEvent = await cursor.next(isolation: #isolation)
-                continue
-            }
-            interruptKey = event.keyCode
-            let timeout = event.timestamp + Input.clickGrace * 1E-3
-            savedEvent = await cursor.next(isolation: #isolation)
-            guard let event = savedEvent else {break}
-            // Check whether this is a release event for the key that we're currently tracking.
-            guard event.keyCode == interruptKey && event.timestamp < timeout && !event.isActive else {
-                // Restart the state machine without consuming another event since this one may make sense as the start event of a new sequence.
-                continue
-            }
-            // Interrupt sequence recognized.
-            interruptKey = nil
-            Output.shared.interrupt()
-            savedEvent = await cursor.next(isolation: #isolation)
-        }
-    }
-
     /// CapsLock status toggle state machine.
     private func trackCapsLockToggleState() async {
         var cursor = capsLockToggleSource.makeAsyncIterator()
         var savedEvent = await cursor.next(isolation: #isolation)
-        while let event = savedEvent {
+        while savedEvent != nil {
+            guard let event = savedEvent else {break}
             isTrackingCapsLockToggle = false
             // Check whether this is a CapsLock key press event.
             guard event.isActive, event.keyCode == .capsLock else {
@@ -174,7 +144,7 @@ import Output
                 continue
             }
             isTrackingCapsLockToggle = true
-            var timeout = event.timestamp + Input.clickGrace * 1e-3
+            var timeout = event.timestamp + Input.clickGrace
             savedEvent = await cursor.next(isolation: #isolation)
             guard let event = savedEvent else {break}
             // Check whether this is a CapsLock key release event.
@@ -182,7 +152,7 @@ import Output
                 // Restart the state machine without consuming another event since this one may make sense as the start event of a new sequence.
                 continue
             }
-            timeout = event.timestamp + Input.clickGrace * 1e-3
+            timeout = event.timestamp + Input.clickGrace
             savedEvent = await cursor.next(isolation: #isolation)
             guard let event = savedEvent else {break}
             // Check whether this is another CapsLock key press event.
@@ -190,7 +160,7 @@ import Output
                 // Restart the state machine without consuming another event since this one may make sense as the start event of a new sequence.
                 continue
             }
-            timeout = event.timestamp + Input.clickGrace * 1e-3
+            timeout = event.timestamp + Input.clickGrace
             savedEvent = await cursor.next(isolation: #isolation)
             guard let event = savedEvent else {break}
             // Check whether this is another CapsLock key release event.
@@ -202,7 +172,6 @@ import Output
             isTrackingCapsLockToggle = false
             isCapsLockEnabled.toggle()
             updateCapsLockStatus()
-            Output.shared.convey([OutputSemantic.capsLockStatusChanged(isCapsLockEnabled)])
             savedEvent = await cursor.next(isolation: #isolation)
         }
     }
@@ -210,7 +179,7 @@ import Output
     /// Handles lower level IO events.
     /// - Parameters:
     ///   - code: Scan code of the raw event.
-    ///   - timestamp: Mach timestamp of the event.
+    ///   - timestamp: Kernel timestamp of the event.
     ///   - isDown: Whether the key or button is being pressed.
     private func handleIOEvent(code: UInt32, timestamp: UInt64, isDown: Bool) {
         // Make sure that we're only dealing with modifiers.
@@ -219,24 +188,24 @@ import Output
         // Compute the timestamp with as much precision as possible but making sure to not cause an integer overflow.
         let timestamp = TimeInterval(.max / timeBase.numer >= timeBase.denom ? timestamp * timeBase.numer / timeBase.denom : timestamp / timeBase.denom * timeBase.numer) * 1e-9
         switch modifier {
-            case .leftControl, .rightControl:
-                // Reset the CapsLock toggle state machine.
-                isTrackingCapsLockToggle = false
-                interruptSink.yield(ModifierEvent(keyCode: modifier, isActive: isDown, timestamp:timestamp))
-            case .capsLock:
-                isKeyBinding = isDown
-                interruptSink.yield(ModifierEvent(keyCode: modifier, isActive: isDown, timestamp:timestamp))
-                capsLockToggleSink.yield(ModifierEvent(keyCode: modifier, isActive: isDown, timestamp: timestamp))
-            default:
-                // Reset the input modifier state machines.
-                interruptKey = nil
-                isTrackingCapsLockToggle = false
+        case .leftControl, .rightControl:
+            if isDown {
+                speechInterruptPulse = ()
+            }
+        case .capsLock:
+            isKeyBinding = isDown
+            capsLockToggleSink.yield(ModifierEvent(keyCode: modifier, isActive: isDown, timestamp: timestamp))
+            if isDown {
+                speechInterruptPulse = ()
+            }
+        default:
+            isTrackingCapsLockToggle = false
         }
     }
 
     /// Handles input tap events.
     /// - Parameter event: Input event to handle.
-    /// - Returns: Whether the event should be forwarded.
+    /// - Returns: Whether the event should be forwarded downstream.
     private func handleTapEvent(_ event: CGEvent) -> Bool {
         if event.flags.contains(.maskAlphaShift) == isCapsLockEnabled && reportedCapsLockStatus != isCapsLockEnabled {
             // Generate CapsLock key down and up events for intentional CapsLock status changes.
@@ -251,8 +220,7 @@ import Output
         guard let keyCode = InputKeyCode(rawValue: keyCode) else {return true}
         // Make sure that key codes are not spurious or CapsLock events that we are already handling and producing ourselves.
         guard keyCode != .keyboardCapsLock && keyCode != .unidentified else {return false}
-        // Reset the input modifier state machines.
-        interruptKey = nil
+        // Reset the CapsLock state machine.
         isTrackingCapsLockToggle = false
         // Let all the input that we don't handle through to downstream listeners.
         guard isKeyBinding || isBrowseModeEnabled || quarantinedKeys.contains(keyCode) else {return true}
@@ -290,7 +258,6 @@ import Output
     /// Resets the cached input state.
     private func reset() {
         reportedCapsLockStatus = isCapsLockEnabled
-        interruptKey = nil
         isTrackingCapsLockToggle = false
         quarantinedKeys.removeAll(keepingCapacity: true)
     }

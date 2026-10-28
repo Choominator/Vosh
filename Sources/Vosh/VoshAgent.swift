@@ -1,5 +1,6 @@
 import Access
 import Input
+import Output
 
 /// Interface between the user and the ``Access`` framework.
 @MainActor final class VoshAgent {
@@ -19,5 +20,15 @@ import Input
         Input.shared.bindKey(key: .keyboardSlashAndQuestion, action: {[weak self] in await self?.access.dumpApplication()})
         Input.shared.bindKey(key: .keyboardPeriodAndRightAngle, action: {[weak self] in await self?.access.dumpApplication()})
         Input.shared.bindKey(key: .keyboardCommaAndLeftAngle, action: {[weak self] in await self?.access.dumpFocus()})
+        Task() {
+            for await isCapsLockEnabled in Input.shared.$isCapsLockEnabled {
+                Output.shared.convey([.capsLockStatusChanged(isCapsLockEnabled)])
+            }
+        }
+        Task() {
+            for await _ in Input.shared.$speechInterruptPulse {
+                Output.shared.interrupt()
+            }
+        }
     }
 }

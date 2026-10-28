@@ -25,9 +25,12 @@ let package = Package(
         ),
         .target(
             name: "Input",
-            dependencies: [.target(name: "Output")]
+            dependencies: [
+                .target(name: "Util")
+            ]
         ),
         .target(name: "Output"),
-        .target(name: "Element")
-    ]
+        .target(name: "Element"),
+        .target(name: "Util"),
+    ],
 )
